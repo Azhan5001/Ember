@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="strict-origin-when-cross-origin"><title>Trailer</title>
+<style>html,body,#player{display:block;width:100%;height:100%;overflow:hidden;margin:0;border:0;background:#000}</style></head>
+<body><div id="player"></div><script>
+const id = new URLSearchParams(location.search).get('id') || location.pathname.split('/').pop();
+function unavailable() { parent.postMessage({type:'ember-trailer-error',id}, '*'); }
+function onYouTubeIframeAPIReady() {
+  if (!/^[\w-]{11}$/.test(id)) return unavailable();
+  new YT.Player('player', {
+    videoId:id, playerVars:{playsinline:1,autoplay:1,origin:location.origin,rel:0},
+    events:{onError:unavailable}
+  });
+}
+</script><script src="https://www.youtube.com/iframe_api" onerror="unavailable()"></script></body></html>

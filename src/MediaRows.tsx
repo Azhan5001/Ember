@@ -183,14 +183,14 @@ export function Spotlight({ items, open, play, toggleLibrary }: any) {
     </section>
   );
 }
-export function ContinueRow({ recent, play, remove }: any) {
+export function ContinueRow({ recent, play, open, remove }: any) {
   const [expanded, setExpanded] = useState(false);
   if (!recent.length) return null;
   const cards = recent.map((p: any) => (
     <div className="continuewrap" key={p.item.id + ":" + p.vid}>
       <button
         className="continue"
-        onClick={() =>
+        onClick={() => p.newEpisode ? open(p.item,p.video?.season) :
           play(
             p.item,
             p.video ||
@@ -205,7 +205,7 @@ export function ContinueRow({ recent, play, remove }: any) {
           <b>{p.item.name}</b>
           <small>
             {p.video ? `S${p.video.season} · E${p.video.episode} — ` : ""}
-            {p.upNext ? "Up next" : Math.floor(p.position / 60)+" min watched"}
+            {p.newEpisode ? "New episode" : p.caughtUp ? (p.item.type==="series"?"Caught up":"Watched") : p.upNext ? "Up next" : Math.floor(p.position / 60)+" min watched"}
           </small>
         </div>
         <progress max={p.duration || 1} value={p.position} />

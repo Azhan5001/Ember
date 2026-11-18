@@ -34,13 +34,13 @@ test('finishing an episode continues to the next and never resurfaces stale epis
  let progress={['series:'+ep1.id]:old};
  assert.equal(continueItems(progress)[0].vid,ep2.id);assert.equal(continueItems(progress)[0].upNext,true);
  progress['series:'+ep2.id]={...old,video:ep2,vid:ep2.id,updatedAt:20};
- assert.equal(continueItems(progress).length,0);
+ assert.equal(continueItems(progress)[0].caughtUp,true);
  progress['series:'+ep2.id].hidden=true;assert.equal(continueItems(progress).length,0);
 });
 test('continue watching keeps unfinished current episodes and hides upcoming ones',()=>{
  const p={item,video:ep1,vid:ep1.id,position:100,duration:1000,updatedAt:1};
  assert.equal(continueItems({x:p})[0].vid,ep1.id);
- assert.equal(continueItems({x:{...p,watched:true}},Date.parse('2023-10-05')).length,0);
+ assert.equal(continueItems({x:{...p,watched:true}},Date.parse('2023-10-05'))[0].caughtUp,true);
 });
 test('party correction uses a 650 ms dead zone with no continuous speed nudging',()=>{
  assert.equal(driftCorrection(10,10.65,true).seek,null);
@@ -60,4 +60,8 @@ test('only validated YouTube IDs can enter trailer frames',()=>{
 test('search tolerates small typos and excludes unrelated results',async()=>{
  const {searchItems}=await import('../src/catalog-core.mjs');const list=[item,{id:'other',type:'series',name:'Black Clover'}];
  assert.equal(searchItems(list,'tokoy revengers')[0].id,item.id);assert.equal(searchItems(list,'tokyo revengrs').length,1);assert.equal(searchItems(list,'something unrelated').length,0);
+});
+test('refreshing a stored directory discovers released episodes with stable source IDs',()=>{
+ const updated=enrichMetadata({...item,videos:[ep1]},item);
+ assert.deepEqual(updated.videos.map(v=>v.id),[ep1.id,ep2.id]);
 });

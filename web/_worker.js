@@ -72,7 +72,7 @@ export default {
     if (url.pathname !== "/api/torbox") {
       const asset = await env.ASSETS.fetch(request);
       const headers = new Headers(asset.headers);
-      headers.set("X-Ember-Build", "0.7.4");
+      headers.set("X-Ember-Build", "0.7.5");
       if (headers.get("Content-Type")?.includes("text/html") || url.pathname === "/ember-build.json") {
         headers.set("Cache-Control", "no-store, max-age=0");
         headers.delete("ETag");

@@ -1,2 +1,6 @@
 
 vendor/media/*.exe
+vendor/media/*.partial
+/node_modules/
+/dist/
+/src-tauri/target/

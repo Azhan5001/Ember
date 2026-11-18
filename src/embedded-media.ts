@@ -25,6 +25,9 @@ export function mediaInput(source: any) {
 }
 
 export function embeddedFormat(audio: boolean) {
+  // Android copies the source video into fragmented MP4. Let the media element
+  // read its actual codec configuration (including HEVC) from the init segment.
+  if(window.ember?.platform==="android")return {format:"mp4" as const,mime:"video/mp4"};
   const choices = window.ember?.platform === "linux"
     ? (["webm", "mp4"] as const)
     : (["mp4", "webm"] as const);
@@ -39,7 +42,7 @@ export function embeddedFormat(audio: boolean) {
 }
 
 export function embeddedStream(video: HTMLVideoElement, url: string, mime: string, duration: number | null) {
-  if (mime.startsWith("video/webm")) {
+  if (mime.startsWith("video/webm") || window.ember?.platform==="android") {
     video.crossOrigin = "anonymous";
     video.src = url;
     return { progressive: true, error: () => undefined, close: () => {} };

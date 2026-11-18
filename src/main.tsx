@@ -85,6 +85,7 @@ function openWebsite(raw: string) {
 function App() {
   const [state, setState] = useState<any>(null);
   const [accountMenu,setAccountMenu]=useState(false);
+  const logoutRef=useRef<(()=>void)|null>(null);
   const accountMenuRef=useRef<HTMLDivElement>(null);
   const [mobileMenu,setMobileMenu]=useState(false);
   const [page, setPage] = useState("Home");
@@ -150,19 +151,29 @@ function App() {
   const playId = useRef(0);
   const stateRef = useRef(state);
   stateRef.current = state;
-  const hydratedProgress=useRef(new Set<string>());
+  const [directoryTick,setDirectoryTick]=useState(0);
+  useEffect(()=>{
+    const refresh=()=>setDirectoryTick(t=>t+1);
+    const timer=setInterval(refresh,15*60*1000);
+    window.addEventListener('focus',refresh);
+    return ()=>{clearInterval(timer);window.removeEventListener('focus',refresh)};
+  },[]);
+  const hydratedProgress=useRef(new Map<string,number>());
   useEffect(()=>{
     if(!state||page!=='Home'||session)return;
     const scope=String(state._people?.owner)+':'+state._people?.activeId;
-    const candidates=(Object.values(state.progress||{}) as any[]).filter(p=>p.item?.type==='series'&&!p.hidden&&!p.item.videos?.length).sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,4);
+    const candidates=(Object.values(state.progress||{}) as any[]).filter(p=>p.item?.type==='series'&&!p.hidden).sort((a,b)=>b.updatedAt-a.updatedAt);
+    let started=0;
     for(const p of candidates){
-      const key=scope+':'+p.item.id;if(hydratedProgress.current.has(key))continue;hydratedProgress.current.add(key);
+      const key=scope+':'+p.item.id;if((hydratedProgress.current.get(key)||0)>Date.now())continue;
+      if(started++>=4)break;
+      hydratedProgress.current.set(key,Date.now()+15*60*1000);
       void metadata(state.addons,p.item).then(item=>{
         const latest=stateRef.current;if(!item.videos?.length||scope!==String(latest?._people?.owner)+':'+latest?._people?.activeId)return;
         setState((old:any)=>({...old,progress:Object.fromEntries(Object.entries(old.progress).map(([id,value]:any)=>[id,value.item?.id===item.id?{...value,item}:value]))}));
       });
     }
-  },[state?.progress,page,!!session,state?._people?.activeId]);
+  },[directoryTick,state?.progress,page,!!session,state?._people?.activeId]);
   const navigateBack = useAppNavigation({page, detail, session, modal}, previous => {
     playId.current++;
     prepared.current = null;
@@ -320,33 +331,44 @@ function App() {
       clearTimeout(timer);
     };
   }, [traktCode]);
-  async function open(item: Item) {
+  async function open(item: Item, preferredSeason?:number) {
     setDetailSeason(
-      Number(item.videos?.find((v: any) => v.season > 0)?.season) || 1,
+      preferredSeason || Number(item.videos?.find((v: any) => v.season > 0)?.season) || 1,
     );
     setDetail(item);
     const m = await metadata(state.addons, item);
     setDetail((d) => (d?.id === item.id ? m : d));
     setDetailSeason(
-      Number(m.videos?.find((v: any) => v.season > 0)?.season) || 1,
+      preferredSeason || Number(m.videos?.find((v: any) => v.season > 0)?.season) || 1,
     );
   }
-  async function play(item: Item, video?: any) {
+  async function play(item: Item, video?: any, showSources=!!video?.showSources) {
     const id = ++playId.current;
     const metadataRefresh=item.type==='series'?metadata(state.addons,item):Promise.resolve(item);
     if(item.type === "series" && !item.videos?.length) { item=await metadataRefresh; if(id!==playId.current)return; }
     video=item.videos?.find((v:any)=>v.id===video?.id)||video;
     const vid = video?.id || item.id;
-    setSession({ item, video, vid, candidates: [], loading: true });
-    setDetail(null);
+    if(Date.parse(video?.released||video?.firstAired)>Date.now())return;
     const started = performance.now();
     const sources =
       item.id === "ember:direct"
         ? [normalize({ name: "Direct stream", url: direct }, "Direct")]
         : await prepare(item, vid);
     if (id !== playId.current) return;
+    if(video && !sources.length){setNotice("No sources available for this episode.");return;}
+    if(video){
+      setState((old:any)=>{
+        const previous=continueItems(old.progress).find((p:any)=>p.item.id===item.id && p.newEpisode && p.vid===vid);
+        if(!previous)return old;
+        const entry=Object.entries(old.progress).find(([,p]:any)=>p.item?.id===item.id&&p.updatedAt===previous.updatedAt);
+        if(!entry)return old;
+        return {...old,progress:{...old.progress,[entry[0]]:{...old.progress[entry[0]],openedEpisode:vid}}};
+      });
+    }
+    setDetail(null);
     prepared.current = null;
     setSession({
+      showSources,
       item,
       video,
       vid,
@@ -527,7 +549,7 @@ function App() {
         <button className="nav mobilemore" aria-label="More navigation" aria-expanded={mobileMenu} onClick={()=>setMobileMenu(v=>!v)}><Menu size={22}/><span>More</span></button>
       </aside>
       {mobileMenu && <><button className="mobilemenubackdrop" aria-label="Close navigation menu" onClick={()=>setMobileMenu(false)}/><div className="mobilemenu" role="group" aria-label="More navigation options" onKeyDown={e=>{if(e.key==='Escape')setMobileMenu(false)}}><button onClick={()=>{setPage("Downloads");setMobileMenu(false)}}>Downloads</button><button onClick={()=>{setPartyOpen(true);setMobileMenu(false)}}>Watch party</button><button onClick={()=>{setPage('History');setMobileMenu(false)}}>View history</button><button onClick={()=>{setPage("Addons");setMobileMenu(false)}}><Puzzle size={20}/>Addons</button><button onClick={()=>{setModal("direct");setMobileMenu(false)}}><Play size={20}/>Open stream</button><button onClick={()=>{setPage("Settings");setMobileMenu(false)}}><Settings size={20}/>Settings</button></div></>}
-      <CloudAccount state={state} setState={setState} onAccount={(a:any)=>{setAccount(a);const current=stateRef.current,owner=current?._people?.owner;const p=a?.id===owner?current._people.accounts[owner]?.profiles.find((p:any)=>p.id===current._people.activeId):null;setUnlocked(!!p&&!p.pin);setChooser(!p||!!p.pin)}} onNotice={setNotice} visible={page === "Settings"}/>
+      <CloudAccount logoutRef={logoutRef} state={state} setState={setState} onAccount={(a:any)=>{setAccount(a);const current=stateRef.current,owner=current?._people?.owner;const p=a?.id===owner?current._people.accounts[owner]?.profiles.find((p:any)=>p.id===current._people.activeId):null;setUnlocked(!!p&&!p.pin);setChooser(!p||!!p.pin)}} onNotice={setNotice} visible={page === "Settings"}/>
 {partyOpen&&<div className="party-modal" role="dialog" aria-modal="true" aria-label="Watch party"><div className="party-dialog"><div className="sectionhead"><h2>Watch party</h2><button className="icon" aria-label="Close watch party" onClick={()=>setPartyOpen(false)}><X/></button></div><WatchPartyPanel party={party} canCreate={!!session}/></div></div>}
 {chooser && <ProfileChooser state={state} setState={setState} account={account} allowClose={unlocked} onClose={()=>{setUnlocked(true);setChooser(false)}} onAuth={()=>{setChooser(false);setPage("Settings")}}/>}
       <main inert={chooser?true:undefined}>
@@ -564,12 +586,11 @@ function App() {
           >
             <div className="miniavatar">{state._people?.owner && state._people?.activeId !== "guest" ? <img src={"/avatars/"+String((state._people.accounts[state._people.owner]?.profiles.find((p:any)=>p.id===state._people.activeId)?.avatar||0)+1).padStart(2,"0")+".svg"} alt=""/> : state.profile[0]}</div>
           </button>
-          {accountMenu&&<div className="accountmenu" role="menu" aria-label="Account menu"><strong>{state.profile}</strong><button role="menuitem" onClick={()=>{setPartyOpen(true);setAccountMenu(false)}}>Watch party</button>{[["Downloads","Downloads"],["Profile","View profile"],["Settings","Settings"],["History","View history"]].map(([destination,label])=><button key={destination} role="menuitem" onClick={()=>{setPage(destination);setAccountMenu(false)}}>{label}</button>)}</div>}
+          {accountMenu&&<div className="accountmenu" role="menu" aria-label="Account menu"><strong>{state.profile}</strong><button role="menuitem" onClick={()=>{setPartyOpen(true);setAccountMenu(false)}}>Watch party</button><button role="menuitem" onClick={()=>{setChooser(true);setAccountMenu(false)}}>Manage profiles</button>{account&&<button role="menuitem" onClick={()=>{setAccountMenu(false);logoutRef.current?.()}}>Log out</button>}{!window.ember&&<a role="menuitem" href="./downloads/index.html">Download app</a>}{[["Downloads","Downloads"],["Settings","Settings"],["History","View history"]].map(([destination,label])=><button key={destination} role="menuitem" onClick={()=>{setPage(destination);setAccountMenu(false)}}>{label}</button>)}</div>}
           </div>
         </header>
         {page === "Downloads" && !session && <DownloadsPanel/>}
         {page === "History" && !session && <HistoryGate key={historyAccessKey(state)} state={state}><HistoryView history={state.history} open={open} onErase={(keep:boolean,key:string|null)=>setState((previous:any)=>eraseHistory(previous,keep,key))}/></HistoryGate>}
-        {page === "Profile" && !session && <div className="settings profilepage"><span className="eyebrow">YOUR SPACE</span><h1>{state.profile}</h1><p>{state._people?.owner?"Your personal profile":"Guest · saved on this device"}</p><div className="actions"><button className="glass" onClick={()=>setChooser(true)}>Manage profiles</button><button className="glass" onClick={()=>setPage("History")}>View history</button></div><HistoryPrivacy key={historyAccessKey(state)} state={state} onSetting={setting}/></div>}
         {!session &&
           (page === "Home" || page === "Discover" || page === "Library") && (
             <>
@@ -608,6 +629,7 @@ function App() {
               )}
               {page === "Home" && !query && (
                 <ContinueRow
+                  open={open}
                   recent={recent}
                   play={play}
                   remove={removeContinue}
@@ -703,7 +725,7 @@ function App() {
               )}
               <footer>
                 <Flame size={16} /> MADE FOR THE WAY YOU WATCH{" "}
-                <span>EMBER / 0.6.2</span>
+                <span>EMBER / 0.7.5</span>
               </footer>
             </>
           )}
@@ -1134,7 +1156,7 @@ function App() {
           </button>
         </div>
       )}
-      {detail && <TitleDetails key={detail.id} item={detail} season={detailSeason} setSeason={setDetailSeason} progress={state.progress} inLibrary={state.library.some((i:Item)=>i.id===detail.id)} onLibrary={toggleLibrary} onPlay={play} onClose={()=>navigateBack(()=>setDetail(null))} openWebsite={openWebsite}/>}
+      {detail && <TitleDetails addons={state.addons} key={detail.id} item={detail} season={detailSeason} setSeason={setDetailSeason} progress={state.progress} inLibrary={state.library.some((i:Item)=>i.id===detail.id)} onLibrary={toggleLibrary} onPlay={play} onClose={()=>navigateBack(()=>setDetail(null))} openWebsite={openWebsite}/>}
       {modal === "direct" && (
         <div className="overlay">
           <div className="dialog panel">

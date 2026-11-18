@@ -26,7 +26,18 @@ export function mergeEpisode(v, extra) {
 export function enrichMetadata(primary, extra) {
   const result={...extra,...Object.fromEntries(Object.entries(primary).filter(([,v])=>v!==null&&v!==undefined&&v!==''&&(!Array.isArray(v)||v.length)))};
   for(const field of ['genres','categories','confirmedGenres','cast','director','trailers','trailerStreams']) result[field]=unique([...(primary[field]||[]),...(extra[field]||[])]);
-  if(primary.videos?.length)result.videos=primary.videos.map(v=>mergeEpisode(v,matchEpisode(v,extra.videos||[])));
+  if(primary.videos?.length){
+    const incoming=extra.videos||[];
+    result.videos=primary.videos.map(v=>mergeEpisode(v,matchEpisode(v,incoming)));
+    const ids=new Set(result.videos.map(v=>v.id));
+    for(const episode of incoming){
+      if(!episode.id||ids.has(episode.id)||primary.id!==extra.id)continue;
+      if(!String(episode.id).startsWith(primary.id+':')&&(!primary.provider||primary.provider!==extra.provider))continue;
+      if(result.videos.some(v=>v.season===episode.season&&v.episode===episode.episode))continue;
+      result.videos.push(episode);
+      ids.add(episode.id);
+    }
+  }
   return result;
 }
 export function tvmazeItem(show) {

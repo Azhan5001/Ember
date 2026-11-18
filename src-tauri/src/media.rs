@@ -126,10 +126,10 @@ impl Media {
         command.args(["-v", "error", "-nostdin", "-copyts"]);
         if let Some(start) = start {
             if !start.is_finite() || !(0.0..=604800.0).contains(&start) { bail!("Invalid subtitle position"); }
-            command.args(["-ss", &start.to_string()]);
+            command.args(["-ss", &start.to_string(), "-t", "42"]);
         }
         input.apply(&mut command)?;
-        if let Some(start)=start { command.args(["-to", &(start+100.0).to_string()]); }
+        if let Some(start)=start { command.args(["-to", &(start+42.0).to_string()]); }
         command.args(["-map", &format!("0:{track}"), "-avoid_negative_ts", "disabled", "-f", "srt", "pipe:1"]);
         let bytes = collect(command, 2_000_000, Duration::from_secs(35)).await?;
         Ok(String::from_utf8(bytes)?)

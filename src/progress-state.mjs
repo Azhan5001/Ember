@@ -31,14 +31,17 @@ export function continueItems(progress, now=Date.now()) {
     const key=p.item.type+':'+p.item.id;if(seen.has(key))return [];seen.add(key);
     if(p.hidden)return [];
     if(!watchIndicator(p).watched && p.position>0)return [p];
-    if(p.item.type!=='series')return [];
+    if(!watchIndicator(p).watched)return [];
+    const caughtUp={...p,caughtUp:true};
+    if(p.item.type!=='series')return [caughtUp];
     const videos=(p.item.videos||[]).filter(v=>Number(v.season)>0).slice().sort((a,b)=>a.season-b.season||a.episode-b.episode);
-    const index=videos.findIndex(v=>v.id===p.vid);if(index<0)return [];
+    const index=videos.findIndex(v=>v.id===p.vid);if(index<0)return [caughtUp];
     const next=videos.slice(index+1).find(v=>!watchIndicator(progress['series:'+v.id]).watched);
-    if(!next || next.released&&Date.parse(next.released)>now)return [];
+    const release=Date.parse(next?.released||next?.firstAired);
+    if(!next || release>now)return [caughtUp];
     const saved=progress['series:'+next.id];if(saved?.hidden)return [];
-    return [{...p,...saved,item:p.item,video:next,vid:next.id,watched:false,position:saved?.position||0,duration:saved?.duration||0,upNext:!saved?.position,updatedAt:p.updatedAt}];
-  });
+    return [{...p,...saved,item:p.item,video:next,vid:next.id,watched:false,position:saved?.position||0,duration:saved?.duration||0,newEpisode:release>p.updatedAt && p.openedEpisode!==next.id && !saved?.position,upNext:!saved?.position,updatedAt:p.updatedAt}];
+  }).sort((a,b)=>Number(!!b.newEpisode)-Number(!!a.newEpisode)||Number(!!a.caughtUp)-Number(!!b.caughtUp)||b.updatedAt-a.updatedAt);
 }
 export function watchIndicator(p) {
   return {

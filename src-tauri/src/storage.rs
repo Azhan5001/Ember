@@ -17,8 +17,8 @@ fn crypt(data:&[u8],encrypt:bool)->Result<Vec<u8>> {
 #[cfg(not(windows))]
 fn crypt(_data:&[u8],_encrypt:bool)->Result<Vec<u8>> {bail!("Secure storage adapter for this platform is not installed")}
 
-#[cfg(target_os="linux")]
-fn linux_key(root: &Path) -> Result<[u8; 32]> {
+#[cfg(any(target_os="linux", target_os="android"))]
+fn private_profile_key(root: &Path) -> Result<[u8; 32]> {
  use aes_gcm::aead::{OsRng, rand_core::RngCore};
  use std::{fs::{self, OpenOptions},io::{Read, Write},os::unix::fs::{OpenOptionsExt, PermissionsExt}};
  let path = root.join("profile.key");
@@ -52,7 +52,7 @@ fn linux_key(root: &Path) -> Result<[u8; 32]> {
 pub struct Store {
  db: Mutex<Connection>,
  pub root: PathBuf,
- #[cfg(target_os="linux")]
+ #[cfg(any(target_os="linux", target_os="android"))]
  key: [u8; 32],
 }
 impl Store {
@@ -60,9 +60,9 @@ impl Store {
   std::fs::create_dir_all(&root)?;
   let db=Connection::open(root.join("ember.sqlite"))?;
   db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA cache_size=-512; PRAGMA journal_size_limit=1048576; CREATE TABLE IF NOT EXISTS state(id INTEGER PRIMARY KEY,data BLOB NOT NULL,encrypted INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS secrets(key TEXT PRIMARY KEY,data BLOB NOT NULL);")?;
-  #[cfg(target_os="linux")]
-  let key=linux_key(&root)?;
-  let store=Self{db:Mutex::new(db),root,#[cfg(target_os="linux")] key};
+  #[cfg(any(target_os="linux", target_os="android"))]
+  let key=private_profile_key(&root)?;
+  let store=Self{db:Mutex::new(db),root,#[cfg(any(target_os="linux", target_os="android"))] key};
   if store.read()?.is_null(){if let Some(old)=legacy{if old.join("ember.sqlite").exists(){store.migrate(&old)?;}}}
   Ok(store)
  }
@@ -78,9 +78,9 @@ impl Store {
   Ok(())
  }
  fn crypt_profile(&self,data:&[u8],encrypt:bool)->Result<Vec<u8>> {
-  #[cfg(not(target_os="linux"))]
+  #[cfg(not(any(target_os="linux", target_os="android")))]
   return crypt(data,encrypt);
-  #[cfg(target_os="linux")]
+  #[cfg(any(target_os="linux", target_os="android"))]
   {
    use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::{Aead, OsRng, rand_core::RngCore}};
    let cipher = Aes256Gcm::new((&self.key).into());

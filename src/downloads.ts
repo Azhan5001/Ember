@@ -1,5 +1,5 @@
 import type {} from './api';
-export type DownloadJob={id:string;name:string;bytes:number;total?:number;state:string;error?:string;path?:string};
+export type DownloadJob={id:string;name:string;bytes:number;total?:number;state:string;error?:string;path?:string;directUrl?:string};
 const jobs:DownloadJob[]=[],controllers=new Map<string,AbortController>();
 export async function downloadList():Promise<DownloadJob[]>{return window.ember?.downloadList?window.ember.downloadList():[...jobs]}
 export async function cancelDownload(id:string){if(window.ember?.downloadCancel)return window.ember.downloadCancel(id);controllers.get(id)?.abort();}
@@ -38,7 +38,11 @@ export async function startDownload(source:any,name:string){
    });
    worker.postMessage({type:'download',id,name,total:job.total},[channel.port2]);
    await done;channel.port1.close();job.state='complete';
-  }catch(e){job.state=controller.signal.aborted?'cancelled':'failed';job.error=String(e).replace(/^Error: /,'');}
+  }catch(e){job.state=controller.signal.aborted?'cancelled':'failed';job.error=String(e).replace(/^Error: /,'');
+    if(!controller.signal.aborted && e instanceof TypeError && /^https?:\/\//i.test(source.url) && !Object.keys(source.behaviorHints?.proxyHeaders?.request||{}).length){
+      job.directUrl=source.url;
+      job.error="Your browser could not fetch this file. Open the provider link and use your browser’s save option.";
+    }}
   finally{void reader?.cancel().catch(()=>{});controllers.delete(id)}
  })();return id;
 }

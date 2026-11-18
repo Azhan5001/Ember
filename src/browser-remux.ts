@@ -29,7 +29,14 @@ export async function browserRemux(video: HTMLVideoElement, url: string, target:
     signal.throwIfAborted();
     const track = await input.getPrimaryVideoTrack();
     if (!track) throw Error('This source has no readable video track.');
-    const audioTracks = await input.getAudioTracks(), audio = audioTracks[audioIndex ?? 0];
+    const audioTracks = await input.getAudioTracks();
+    let selectedIndex=audioIndex ?? 0;
+    if(audioIndex===undefined && audioTracks.length && !(await audioTracks[0].getCodec())){
+      for(let index=1;index<audioTracks.length;index++){
+        if(await audioTracks[index].getCodec()){selectedIndex=index;break;}
+      }
+    }
+    const audio=audioTracks[selectedIndex];
     const videoCodec = await track.getCodec(), audioCodec = await audio?.getCodec();
     const videoConfig = await track.getDecoderConfig(), audioConfig = await audio?.getDecoderConfig();
     if (!videoCodec || !videoConfig || (audio && (!audioCodec || !audioConfig)))
@@ -142,7 +149,7 @@ export async function browserRemux(video: HTMLVideoElement, url: string, target:
       if (media.readyState === 'open') media.endOfStream();
     };
     void run().catch(error=>{if (!signal.aborted) failure = error;});
-    return {start,duration,tracks,transcodeAudio,audio:audio ? (audioIndex ?? 0) : undefined,
+    return {start,duration,tracks,transcodeAudio,audio:audio ? selectedIndex : undefined,
       stream:{progressive:false,error:()=>failure,close:()=>{signal.removeEventListener('abort',close);close();}}};
   } catch (error) {
     signal.removeEventListener('abort',close);

@@ -226,7 +226,10 @@ export async function alternateArtwork(addons: Addon[], item: Item, kind: string
     return [...new Set(urls)];
   });
 }
-export async function streams(addons: Addon[], type: string, id: string) {
+const streamCache = new CatalogCache({ttl: 120000, limit: 100});
+export async function lookupStreams(addons: Addon[], type: string, id: string): Promise<{sources:any[],complete:boolean}> {
+  const key = JSON.stringify([type,id,addons.filter(a=>a.enabled).map(a=>[a.base,a.manifest.resources])]);
+  return streamCache.get(key, async () => {
   const sources: Addon[] = (!window.ember || window.ember.platform === "linux") ? preferConfiguredTorrentio(addons) : addons;
   const result = await Promise.allSettled(
     sources
@@ -236,7 +239,11 @@ export async function streams(addons: Addon[], type: string, id: string) {
         return (r.streams || []).map((s: any) => normalize(s, a.manifest.name));
       }),
   );
-  return result.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+  return {sources:result.flatMap(r=>r.status==="fulfilled"?r.value:[]),complete:result.every(r=>r.status==="fulfilled")};
+  });
+}
+export async function streams(addons: Addon[], type: string, id: string) {
+  return (await lookupStreams(addons,type,id)).sources;
 }
 export async function subtitles(
   addons: Addon[],

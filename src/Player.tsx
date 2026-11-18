@@ -1,3 +1,4 @@
+import { useEpisodeAvailability } from './use-episode-availability';
 import {Download} from "lucide-react";
 import DownloadsPanel from './DownloadsPanel';
 import {startDownload} from './downloads';
@@ -12,7 +13,7 @@ import {useAnimatedPanel} from "./use-animated-panel";
 import {playbackRange,mergeRanges} from "./history-core.mjs";
 import {findAudioTrack,labeledAudioSource,audioLanguage} from "./audio-track-core.mjs";
 import {embeddedFormat, embeddedStream, mediaInput, type MediaInfo, type MediaTrack} from "./embedded-media";
-import {prefersNative, missingVideoFrames} from "./video-frame-core.mjs";
+import {prefersNative, missingVideoFrames, hintedAudio, needsAudioConversion} from "./video-frame-core.mjs";
 import { watchIndicator } from "./progress-state.mjs";
 import PlaybackSettings from "./PlaybackSettings";
 import { automaticSegment, normalizeSegments } from "./skip-core.mjs";
@@ -184,7 +185,7 @@ export default function Player({
       : state.progress[s.item.type + ":" + s.vid]?.position || 0,
     duration: 0,
   });
-  const [drawer, setDrawer, drawerClosing] = useAnimatedPanel(s.video?.showSources ? "sources" : "");
+  const [drawer, setDrawer, drawerClosing] = useAnimatedPanel((s.showSources || s.video?.showSources) ? "sources" : "");
   useEffect(()=>{if(drawer)endHold(true)},[drawer]);
   useEffect(() => {
     if (!drawer) return;
@@ -611,12 +612,14 @@ export default function Player({
         source = await resolve({...input,url:undefined});
       }
       if (id !== generation.current) return;
-      if (browser && forceCompatibility && !hlsSource(source)) source = {...source,browserRemux:true};
+      const canPlayAudio=(mime:string)=>videos.current[targetSlot]?.canPlayType(mime);
+      const riskyAudio=needsAudioConversion(hintedAudio(input)||hintedAudio(source),canPlayAudio);
+      if (browser && (forceCompatibility||riskyAudio) && !hlsSource(source)) source = {...source,browserRemux:true};
       const isHls = hlsSource(source);
       const browserType = source.contentType;
       const useRelay = !!source.providerRelay;
       const requested = !!window.ember && (forceCompatibility ||
-        (volumeRef.current > 100 && !isHls) || prefersNative(input) || prefersNative(source) ||
+        ((volumeRef.current > 100 || riskyAudio) && !isHls) || prefersNative(input) || prefersNative(source) ||
         (!useRelay && !!source.behaviorHints?.proxyHeaders?.request));
       const infoPromise = !isHls || requested ? probe(source) : Promise.resolve(null);
       let info = linux && !isHls
@@ -626,7 +629,7 @@ export default function Player({
       const directType = browserType && browserType !== "application/octet-stream"
         ? videos.current[targetSlot]?.canPlayType(browserType) : undefined;
       let converted = requested || (linux && !isHls && (
-        directType === "" || !!info?.hdr || ["hevc", "av1"].includes(info?.video || "")
+        directType === "" || needsAudioConversion(defaultAudio(info)?.codec,canPlayAudio) || !!info?.hdr || ["hevc", "av1"].includes(info?.video || "")
       ));
       
       const target = () => {
@@ -694,9 +697,6 @@ export default function Player({
         setActiveAudioTrack(compatibility.current[targetSlot]?.audio ?? defaultAudio(info)?.id ?? (enabled >= 0 ? enabled : undefined));
       }
       readyAudio(targetSlot);
-      const textTracks=Array.from(v.textTracks||[]);
-      setBrowserSubs(textTracks.map((track,index)=>({id:'browser:'+index,browserTrack:index,lang:track.language||'und',name:track.label||'Embedded track '+(index+1),provider:'Embedded in video'})));
-      textTracks.forEach(t=>{t.mode='disabled'});
       health(v.readyState >= 2);
       setPaused(v.paused);pauseRef.current=v.paused;
       time.current = absoluteTime(targetSlot);
@@ -739,27 +739,32 @@ export default function Player({
         setSubSelection(null);
         setSubText("");
       }
-      const list = await subtitles(latest.current.state.addons, s.item.type, s.vid, source).catch(() => []);
-      if (id !== generation.current) return;
-      setSubs(list);
-      if (!subRef.current && latest.current.state.settings.subtitleLanguage !== "off") {
-        const wanted = lang(latest.current.state.settings.subtitleLanguage);
-        const embedded = info?.tracks.find(t => t.type === "sub" && !t.bitmap && lang(t.lang) === wanted);
-        const chosen = embedded
-          ? {...embedded, embedded:true} : list.find((x:any) => lang(x.lang) === wanted);
-        if (chosen) void selectSub(chosen, false, source);
-      }
+      // Start local track selection as soon as the probe is ready. A slow add-on
+      // must not delay audio recovery or extraction of an embedded caption.
+      const selectionToken=subGeneration.current;
+      const addonSubs = subtitles(latest.current.state.addons, s.item.type, s.vid, source).catch(() => []);
+      void infoPromise.then(available=>{
+        if(id!==generation.current || selectionToken!==subGeneration.current || subRef.current) return;
+        const wanted=latest.current.state.settings.subtitleLanguage;
+        const track=available?.tracks.find(t=>t.type==="sub"&&!t.bitmap&&lang(t.lang)===lang(wanted));
+        if(wanted!=="off"&&track)void selectSub({...track,embedded:true},false,source);
+      });
+      void addonSubs.then(async list=>{
+        if(id!==generation.current)return;
+        setSubs(list);
+        await infoPromise;
+        if(id!==generation.current||selectionToken!==subGeneration.current||subRef.current)return;
+        const wanted=latest.current.state.settings.subtitleLanguage;
+        const sub=list.find((entry:any)=>lang(entry.lang)===lang(wanted));
+        if(wanted!=="off"&&sub)void selectSub(sub,false,source);
+      });
       if (linux && !isHls) {
         void infoPromise.then(available => {
           if (id !== generation.current || !available || opening.current) return;
           const preferred = findAudioTrack(available.tracks, preferredAudio());
           const currentTrack = compatibility.current[targetSlot]?.audio ?? defaultAudio(available)?.id;
-          if (preferred && preferred.id !== currentTrack) {
-            void choose(source, true, false, {audio:preferred.id});
-          } else if (!subRef.current && latest.current.state.settings.subtitleLanguage !== "off") {
-            const wanted = lang(latest.current.state.settings.subtitleLanguage);
-            const track = available.tracks.find(t => t.type === "sub" && !t.bitmap && lang(t.lang) === wanted);
-            if (track) void selectSub({...track,embedded:true}, false, source);
+          if ((preferred && preferred.id !== currentTrack) || (!compatibility.current[targetSlot] && needsAudioConversion((preferred||defaultAudio(available))?.codec,canPlayAudio))) {
+            void choose(source, true, false, {audio:preferred?.id});
           }
         });
       }
@@ -770,11 +775,8 @@ export default function Player({
           setActiveAudioTrack(defaultAudio(available)?.id);
           const preferred = findAudioTrack(available.tracks, preferredAudio());
           const riskyVideo = available.hdr || ["hevc", "av1"].includes(available.video || "");
-          if ((riskyVideo || (preferred && preferred.id !== defaultAudio(available)?.id)) && !opening.current) {
+          if ((riskyVideo || needsAudioConversion((preferred||defaultAudio(available))?.codec,canPlayAudio) || (preferred && preferred.id !== defaultAudio(available)?.id)) && !opening.current) {
             void choose(source, true, false, {audio:preferred?.id});
-          } else if (!subRef.current && latest.current.state.settings.subtitleLanguage !== "off") {
-            const embedded = available.tracks.find(t => t.type === "sub" && !t.bitmap && lang(t.lang) === lang(latest.current.state.settings.subtitleLanguage));
-            if (embedded) void selectSub({...embedded,embedded:true}, false, source);
           }
         });
       }
@@ -815,7 +817,7 @@ export default function Player({
   chooseRef.current = choose;
   useEffect(() => {
     if (s.loading) return;
-    if (s.video?.showSources) {
+    if ((s.showSources || s.video?.showSources)) {
       setStatus("");
       return;
     }
@@ -981,8 +983,8 @@ export default function Player({
       }
       Array.from(videos.current[active.current]?.textTracks||[]).forEach((track,index)=>{track.mode=sub.browserTrack===index?'hidden':'disabled'});
       setBrowserCaption('');
-      const start = sub.embedded && !sub.bitmap && !sub.browserTrack
-        ? windowStart ?? Math.max(0, Math.floor((time.current.position-5) / 60) * 60) : undefined;
+      const start = sub.embedded && !sub.bitmap && sub.browserTrack===undefined
+        ? windowStart ?? Math.max(0, Math.floor((time.current.position-3) / 24) * 24) : undefined;
       const raw = sub.bitmap || sub.browserTrack!==undefined ? "" : sub.embedded
         ? await window.ember?.mediaSubtitle(mediaInput(source), sub.id, start)
         : sub.text || await request(sub.url);
@@ -1000,6 +1002,19 @@ export default function Player({
         onNotice("Could not load that subtitle. The current track has been kept.");
     }
   }
+  useEffect(()=>{
+    const list=videos.current[slot]?.textTracks;
+    if(!list)return;
+    function update(){
+      const tracks=Array.from(list!);
+      setBrowserSubs(tracks.map((track,index)=>({id:"browser:"+index,browserTrack:index,lang:track.language||"und",name:track.label||"Embedded track "+(index+1),provider:"Embedded in video"})));
+      tracks.forEach((track,index)=>{track.mode=subRef.current?.browserTrack===index?"hidden":"disabled"});
+    }
+    update();
+    list.addEventListener("addtrack",update);
+    list.addEventListener("removetrack",update);
+    return ()=>{list.removeEventListener("addtrack",update);list.removeEventListener("removetrack",update)};
+  },[slot,selected]);
   function turnSubsOff() {
     Array.from(videos.current[active.current]?.textTracks||[]).forEach(t=>{t.mode='disabled'});setBrowserCaption('');
     subGeneration.current++;
@@ -1012,7 +1027,7 @@ export default function Player({
     setSubText("");
     onSetting({subtitleLanguage:"off"});
   }
-  const subtitleWindow = Math.max(0, Math.floor((position-5) / 60) * 60);
+  const subtitleWindow = Math.max(0, Math.floor((position-3) / 24) * 24);
   useEffect(() => {
     const sub = subRef.current;
     if (sub?.start !== undefined && sub.start !== subtitleWindow) {
@@ -1212,10 +1227,22 @@ export default function Player({
     languages = [
       ...new Set(subtitleList.map((t) => lang(t.lang || "und"))),
     ].sort();
+  const [allLanguages,setAllLanguages] = useState(false);
+  const [allTracks,setAllTracks] = useState(false);
+  const languageTracks = subtitleList.filter(track => lang(track.lang || "und") === subLanguage);
+  const missingEpisodes = useEpisodeAvailability(episodeList,state.addons,selectedSeason,s.item.videos,drawer==="episodes");
+  const disabledEpisode = (v:any) => Date.parse(v.released||v.firstAired)>Date.now() || missingEpisodes.has(v.id);
+  useEffect(()=>{setAllTracks(false)},[subLanguage,drawer]);
+  useEffect(()=>{setAllLanguages(false)},[drawer]);
+  const preferredKey=selected?.key || (state.settings.seriesSources?.[s.item.id] ? candidates(quality)[0]?.key : undefined);
+  useEffect(()=>{
+    if(drawer==="sources") container.current?.querySelector(".source.selected")?.scrollIntoView({block:"center"});
+  },[drawer,preferredKey,s.candidates.length]);
   return (
     <div
       className={"player " + (!controlsVisible ? "controls-hidden" : "")}
       ref={container}
+      onContextMenu={event=>{event.preventDefault();setDrawer("more")}}
       onPointerMove={e=>{if(e.pointerType==='mouse'){keyboardFocus.current=false;wake();}}}
       onPointerDown={()=>{keyboardFocus.current=false;activity.current=Date.now();}}
       onPointerUp={e=>finishSurface(e)}
@@ -1438,7 +1465,7 @@ export default function Player({
             {fmt(position)} <em>/ {fmt(duration)}</em>
           </span>
           <div className="spacer" />
-          <div className="playerextras"><button className="icon" aria-label="Download video" title="Download video" disabled={!selected} onClick={()=>void downloadSelected()}><Download/></button>
+          <div className="playerextras">
           <select
             aria-label="Video quality"
             value={quality}
@@ -1535,6 +1562,8 @@ export default function Player({
           </div>
           {drawer === 'more' ? <div className="player-more-menu"><button className="glass" disabled={!selected} onClick={()=>void downloadSelected()}>Download video</button>{[['downloads','Downloads'],['sources','Sources and quality'],['audio','Audio'],['subtitles','Subtitles'],['episodes','Episodes'],['party','Watch party'],['settings','Player settings']].map(([key,label])=><button className="glass" key={key} onClick={()=>setDrawer(key)}>{label}</button>)}<button className="glass" onClick={()=>{setDrawer('');void (document.fullscreenElement?document.exitFullscreen():container.current?.requestFullscreen())}}>Fullscreen</button></div> : drawer === 'downloads' ? <DownloadsPanel/> : drawer === "party" ? <WatchPartyPanel party={party} canCreate={s.item.id!=="ember:direct"}/> : drawer === "settings" ? (
             <>
+              <button className="glass" disabled={!selected} onClick={()=>void downloadSelected()}>Download video</button>
+              <button className="glass" onClick={()=>setDrawer("downloads")}>Downloads</button>
               <PlaybackSettings
                 settings={state.settings}
                 onSetting={onSetting}
@@ -1603,10 +1632,10 @@ export default function Player({
                       className={
                         "episoderow " + (v.id === s.vid ? "current" : "")
                       }
-                      key={v.id}
+                      key={v.id} data-episode-id={Date.parse(v.released||v.firstAired)>Date.now()?undefined:v.id}
                     >
                       <button
-                        disabled={!!party?.snapshot&&!party.isHost}
+                        disabled={disabledEpisode(v)||!!party?.snapshot&&!party.isHost}
                         aria-current={v.id === s.vid ? "true" : undefined}
                         onClick={() => {
                           store();
@@ -1627,7 +1656,7 @@ export default function Player({
                         </span>
                       </button>
                       <button
-                        className="icon"
+                        disabled={disabledEpisode(v)||!!party?.snapshot&&!party.isHost} className="icon"
                         aria-label={
                           "Sources for S" + v.season + " E" + v.episode
                         }
@@ -1676,7 +1705,7 @@ export default function Player({
                 return (
                 <div className="source-download-row" key={source.key}><button
                   className={
-                    "source " + (source.key === selected?.key ? "selected" : "")
+                    "source " + (source.key === preferredKey ? "selected" : "")
                   }
                   key={source.key}
                   onClick={() => {
@@ -1802,10 +1831,9 @@ export default function Player({
                   />
                 </label>
               </div>
-              <section className="subtitleadjustments"><h3>Subtitle timing</h3><label>Delay <output>{subtitleDelay.toFixed(1)} s</output><input aria-label="Subtitle delay" type="range" min="-30" max="30" step="0.1" value={subtitleDelay} disabled={!subSelection||subSelection.bitmap} onChange={e=>onSetting({subtitleDelays:{...state.settings.subtitleDelays,[delayKey]:Number(e.target.value)}})}/></label><small>Negative shows earlier; positive shows later. Saved for this subtitle track/release and title across episodes.</small>{subSelection?.bitmap&&<small>Embedded image subtitles cannot be styled or delayed here. Choose a text subtitle.</small>}<h3>Appearance for your profile</h3><label>Height <output>{appearance.height||0}%</output><input aria-label="Subtitle height" type="range" min="0" max="35" step="1" value={appearance.height||0} onChange={e=>onSetting({subtitleAppearance:{...appearance,height:Number(e.target.value)}})}/></label><label>Scale <output>{Math.round((appearance.scale||1)*100)}%</output><input aria-label="Subtitle scale" type="range" min="0.6" max="2" step="0.05" value={appearance.scale||1} onChange={e=>onSetting({subtitleAppearance:{...appearance,scale:Number(e.target.value)}})}/></label>{[['color','Text color','#fafafa'],['outline','Outline color','#000000']].map(([key,label,value])=><label key={key}>{label}<input aria-label={label} type="color" value={appearance[key]||value} onChange={e=>onSetting({subtitleAppearance:{...appearance,[key]:e.target.value}})}/></label>)}<label>Background<select aria-label="Subtitle background" value={appearance.background||''} onChange={e=>onSetting({subtitleAppearance:{...appearance,background:e.target.value}})}><option value="">Transparent (default)</option><option value="#00000080">Soft black</option><option value="#000000">Black</option><option value="#ffffffcc">Light</option></select></label><button className="glass" onClick={()=>onSetting({subtitleAppearance:{}})}>Reset appearance</button><button className="glass" disabled={!subSelection} onClick={()=>onSetting({subtitleDelays:{...state.settings.subtitleDelays,[delayKey]:0}})}>Reset delay</button></section>
               <div className="subtitlepicker">
                 <nav aria-label="Subtitle languages">
-                  {languages.map((l) => (
+                  {(allLanguages?languages:languages.slice(0,5)).map((l) => (
                     <button
                       key={l}
                       className={l === subLanguage ? "selected" : ""}
@@ -1821,11 +1849,11 @@ export default function Player({
                       </small>
                     </button>
                   ))}
+                  {languages.length>5&&<button aria-expanded={allLanguages} onClick={()=>setAllLanguages(!allLanguages)}>{allLanguages?"Show fewer languages":"Show all "+languages.length+" languages"}</button>}
                   {!languages.length && <p>No languages yet.</p>}
                 </nav>
                 <div className="subtitletracks" aria-label="Subtitle tracks">
-                  {subtitleList
-                    .filter((t) => lang(t.lang || "und") === subLanguage)
+                  {(allTracks?languageTracks:languageTracks.slice(0,5))
                     .map((sub, i) => (
                       <button
                         className={
@@ -1853,11 +1881,13 @@ export default function Player({
                         </span>
                       </button>
                     ))}
+                  {languageTracks.length>5&&<button aria-expanded={allTracks} onClick={()=>setAllTracks(!allTracks)}>{allTracks?"Show fewer tracks":"Show all "+languageTracks.length+" tracks"}</button>}
                   {!subtitleList.some(
                     (t) => lang(t.lang || "und") === subLanguage,
                   ) && <p>No tracks in this language.</p>}
                 </div>
               </div>
+              <section className="subtitleadjustments"><h3>Subtitle timing</h3><label>Delay <output>{subtitleDelay.toFixed(1)} s</output><input aria-label="Subtitle delay" type="range" min="-30" max="30" step="0.1" value={subtitleDelay} disabled={!subSelection||subSelection.bitmap} onChange={e=>onSetting({subtitleDelays:{...state.settings.subtitleDelays,[delayKey]:Number(e.target.value)}})}/></label><small>Negative shows earlier; positive shows later. Saved for this subtitle track/release and title across episodes.</small>{subSelection?.bitmap&&<small>Embedded image subtitles cannot be styled or delayed here. Choose a text subtitle.</small>}<h3>Appearance for your profile</h3><label>Height <output>{appearance.height||0}%</output><input aria-label="Subtitle height" type="range" min="0" max="35" step="1" value={appearance.height||0} onChange={e=>onSetting({subtitleAppearance:{...appearance,height:Number(e.target.value)}})}/></label><label>Scale <output>{Math.round((appearance.scale||1)*100)}%</output><input aria-label="Subtitle scale" type="range" min="0.6" max="2" step="0.05" value={appearance.scale||1} onChange={e=>onSetting({subtitleAppearance:{...appearance,scale:Number(e.target.value)}})}/></label>{[['color','Text color','#fafafa'],['outline','Outline color','#000000']].map(([key,label,value])=><label key={key}>{label}<input aria-label={label} type="color" value={appearance[key]||value} onChange={e=>onSetting({subtitleAppearance:{...appearance,[key]:e.target.value}})}/></label>)}<label>Background<select aria-label="Subtitle background" value={appearance.background||''} onChange={e=>onSetting({subtitleAppearance:{...appearance,background:e.target.value}})}><option value="">Transparent (default)</option><option value="#00000080">Soft black</option><option value="#000000">Black</option><option value="#ffffffcc">Light</option></select></label><button className="glass" onClick={()=>onSetting({subtitleAppearance:{}})}>Reset appearance</button><button className="glass" disabled={!subSelection} onClick={()=>onSetting({subtitleDelays:{...state.settings.subtitleDelays,[delayKey]:0}})}>Reset delay</button></section>
             </>
           )}
         </div>

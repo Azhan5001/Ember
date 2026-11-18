@@ -41,6 +41,6 @@ async fn torrent(State(s):State<Server>,Path((token,hash,index)):Path<(String,St
 
 async fn trailer(State(s):State<Server>,Path((token,id)):Path<(String,String)>)->Response{
  if token!=s.token||id.len()!=11||!id.bytes().all(|b|b.is_ascii_alphanumeric()||b==b'-'||b==b'_'){return StatusCode::NOT_FOUND.into_response()}
- let html=format!(r#"<!doctype html><html><head><meta name="referrer" content="strict-origin-when-cross-origin"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body,iframe{{width:100%;height:100%;margin:0;border:0;background:#000}}</style></head><body><iframe src="https://www.youtube.com/embed/{id}?rel=0&amp;playsinline=1" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen></iframe></body></html>"#);
+ let html=include_str!("../../public/trailer.html");
  Response::builder().header("content-type","text/html; charset=utf-8").header("referrer-policy","strict-origin-when-cross-origin").header("cache-control","no-store").body(Body::from(html)).unwrap()
 }

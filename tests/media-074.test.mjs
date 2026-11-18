@@ -1,3 +1,13 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {matchEpisode,mergeEpisode} from '../src/metadata-core.mjs';import {subtitleCues} from '../src/core.mjs';
 test('episode backup matches exact season/episode when backup dates are absent',()=>{const v={season:3,episode:1,title:'Episode 1',released:'2025-01-01'},b={season:3,episode:1,image:{original:'https://example.test/ep.jpg'}};assert.equal(mergeEpisode(v,matchEpisode(v,[b])).thumbnail,b.image.original);assert.equal(matchEpisode(v,[{season:2,episode:1}]),undefined)});
 test('embedded extraction keeps absolute source times through seek windows',()=>{const cues=subtitleCues('1\n00:01:05,000 --> 00:01:08,000\nCaption after a seek\n');assert.equal(cues[0].start,65);assert.equal(cues[0].end,68)});
+
+import {hintedAudio,needsAudioConversion} from '../src/video-frame-core.mjs';
+test('4K sources with unsupported surround audio select compatibility playback',()=>{
+ for(const [name,codec] of [['2160p DTS-HD MA','dts'],['4K TrueHD Atmos','truehd'],['2160p DDP5.1','eac3']]){
+  assert.equal(hintedAudio({name}),codec);
+  assert.equal(needsAudioConversion(codec,()=>''),true);
+  assert.equal(needsAudioConversion(codec,()=>'probably'),false);
+ }
+ assert.equal(needsAudioConversion('aac',()=>''),false);
+});

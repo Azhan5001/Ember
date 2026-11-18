@@ -5,7 +5,7 @@ import {capture,newMeta,receive,resolveConflicts,applyRecord} from './sync-core.
 import {ensurePeople,ensureAccount,enterGuest,enterProfile,saveCurrent,setSyncEnabled} from './profile-core.mjs';
 const empty=()=>migrate({profile:'You',settings:{},addons:[],library:[],progress:{}});
 const intervalMs=(v:string)=>({daily:86400000,weekly:604800000,manual:Infinity}[v] || 86400000);
-export default function CloudAccount({state,setState,onAccount,onNotice,visible}:any){
+export default function CloudAccount({logoutRef,state,setState,onAccount,onNotice,visible}:any){
  const client=cloud(),[user,setUser]=useState<any>(null),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[code,setCode]=useState(''),[recovery,setRecovery]=useState(false),[working,setWorking]=useState(false),[status,setStatus]=useState('Local profile'),[target,setTarget]=useState<HTMLElement|null>(null);
  const [authReady,setAuthReady]=useState(false);
  const [mode,setMode]=useState<'signin'|'register'|'recover'|'verify'|'password'>('signin'),[formError,setFormError]=useState('');
@@ -74,6 +74,7 @@ export default function CloudAccount({state,setState,onAccount,onNotice,visible}
   else{if(password.length<8)throw Error('Use at least 8 characters.');r=action==='Sign in'?await client.auth.signInWithPassword({email:email.trim(),password}):await client.auth.signUp({email:email.trim(),password});if(!r.error){setPassword('');if(action==='Create account' && !r.data?.session){setRecovery(false);setMode('verify');}onNotice(action==='Create account'?'Check your email for the confirmation code.':'Signed in. Your account data is loading.');}}
   if(r?.error)throw r.error;
  }catch(e:any){setFormError(e.message || (typeof e==='string'?e:'Account request failed.'));onNotice(e.message || (typeof e==='string'?e:'Account request failed.'))}finally{setWorking(false)}}
+ React.useImperativeHandle(logoutRef,()=>()=>void auth('Sign out'));
  const pending=Object.values(state._sync?.pending || {}),conflicts=pending.filter((o:any)=>o.conflict).length;
  const ui=<div className="panel cloudaccount"><h3>Your Ember account</h3><p>Settings, addons, library, history and continue watching stay local and sync with your account. Addon configuration can contain private access tokens; only your account can access its records.</p><p role="status">{user?.email || 'Not signed in'} · {status}</p>
  {user && formError && <p className="autherror" role="alert">{formError}</p>}

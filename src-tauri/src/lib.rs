@@ -26,7 +26,7 @@ fn link(raw:&str)->Option<String>{let u=raw.replacen("stremio://","https://",1).
  #[cfg(desktop)]{use tauri_plugin_deep_link::DeepLinkExt;app.deep_link().register_all().map_err(error)?;}Ok(true)
 }
 #[tauri::command]fn external(app:tauri::AppHandle,url:String)->Cmd<()>{use tauri_plugin_opener::OpenerExt;let u=network::checked(&url).map_err(error)?;app.opener().open_url(u.as_str(),None::<&str>).map_err(error)}
-#[tauri::command]fn download_start(s:tauri::State<Backend>,request:downloads::Request)->Cmd<String>{s.downloads.start(request).map_err(error)}
+#[tauri::command]async fn download_start(s:tauri::State<'_,Backend>,request:downloads::Request)->Cmd<String>{s.downloads.start(request).map_err(error)}
 #[tauri::command]fn download_list(s:tauri::State<Backend>)->Vec<downloads::Job>{s.downloads.list()}
 #[tauri::command]fn download_open(app:tauri::AppHandle,s:tauri::State<Backend>,id:String)->Cmd<()>{use tauri_plugin_opener::OpenerExt;let path=s.downloads.completed(&id).ok_or("Download not found")?;app.opener().open_path(path,None::<&str>).map_err(error)}
 #[tauri::command]fn download_cancel(s:tauri::State<Backend>,id:String){s.downloads.cancel(&id)}
