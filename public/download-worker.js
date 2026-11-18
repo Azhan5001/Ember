@@ -12,7 +12,10 @@ self.addEventListener('message',event=>{
  setTimeout(()=>jobs.delete(id),60000);
 });
 self.addEventListener('fetch',event=>{
- const url=new URL(event.request.url),id=url.pathname.split('/').at(-2),job=jobs.get(id);
+ const url=new URL(event.request.url);
+ const prefix=new URL('downloads/file/',self.registration.scope);
+ if(event.request.method!=='GET'||url.origin!==prefix.origin||!url.pathname.startsWith(prefix.pathname))return;
+ const id=url.pathname.slice(prefix.pathname.length).split('/')[0],job=jobs.get(id);
  if(!job)return;
  jobs.delete(id);
  const headers={'Content-Type':'application/octet-stream','Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(job.name)}`,'Cache-Control':'no-store'};
