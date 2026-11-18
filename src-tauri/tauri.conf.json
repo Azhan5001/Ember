@@ -1,0 +1,91 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Ember",
+  "version": "0.7.4",
+  "identifier": "app.ember.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Ember",
+        "decorations": false,
+        "width": 1440,
+        "height": 960,
+        "minWidth": 900,
+        "minHeight": 650,
+        "backgroundColor": "#08090c",
+        "theme": "Dark",
+        "additionalBrowserArgs": "--disk-cache-size=33554432"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' blob: http: https:; connect-src 'self' ipc: http: https: ws: wss:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-src https://www.youtube-nocookie.com https://www.youtube.com http://127.0.0.1:*"
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "ember",
+          "stremio"
+        ]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "resources": {
+      "../licenses/NOTICE.txt": "licenses/NOTICE.txt"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "compression": "zlib",
+        "template": "./windows/installer.nsi",
+        "installerIcon": "icons/icon.ico"
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "gstreamer1.0-plugins-base",
+          "gstreamer1.0-plugins-good"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "webkit2gtk4.1",
+          "gtk3",
+          "openssl-libs",
+          "gstreamer1-plugins-base",
+          "gstreamer1-plugins-good",
+          "gstreamer1-plugins-good-extras",
+          "libdav1d"
+        ],
+        "compression": {
+          "type": "zstd",
+          "level": 9
+        }
+      }
+    },
+    "useLocalToolsDir": true,
+    "category": "Video"
+  }
+}

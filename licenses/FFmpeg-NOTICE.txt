@@ -1,0 +1,7 @@
+Ember's compatibility decoder uses separate FFmpeg and FFprobe executables.
+They are supplied by BtbN's FFmpeg-Builds project and licensed under the
+GNU General Public License. See FFmpeg-LICENSE.txt for the license text.
+The scripts and source references used to build the binaries are provided by
+https://github.com/BtbN/FFmpeg-Builds and https://github.com/FFmpeg/FFmpeg.
+The matching build release and binary checksums are recorded in the source
+package at scripts/ffmpeg-assets.json.

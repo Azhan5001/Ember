@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {playbackHealth,mediaPosition,localPosition} from '../src/playback-health.mjs';
+const sample=(now,position,more={})=>({now,position,slot:0,paused:false,opening:false,waitingAt:0,...more});
+test('advancing playback clears waiting without requiring a large buffer',()=>{let p=playbackHealth(null,sample(1000,10));for(let n=1;n<12;n++){p=playbackHealth(p,sample(1000+n*500,10+n*.5,{waitingAt:1000}));assert.equal(p.buffering,false)}});
+test('real waiting is debounced and progress clears the notice',()=>{let p=playbackHealth(null,sample(1000,10));p=playbackHealth(p,sample(1500,10,{waitingAt:1100}));assert.equal(p.buffering,false);p=playbackHealth(p,sample(2000,10,{waitingAt:1100}));assert.equal(p.buffering,true);p=playbackHealth(p,sample(2100,10.1,{waitingAt:1100}));assert.equal(p.buffering,false)});
+test('silent stalls are detected; pause and source changes are not stalls',()=>{const p=playbackHealth(null,sample(1000,10));assert.equal(playbackHealth(p,sample(3000,10)).buffering,true);assert.equal(playbackHealth(p,sample(3000,10,{paused:true})).buffering,false);assert.equal(playbackHealth(p,sample(3000,10,{opening:true})).buffering,false);assert.equal(playbackHealth(p,sample(3000,0,{slot:1})).buffering,false)});
+test('native speed conversion preserves source timeline and seek coordinates',()=>{assert.equal(mediaPosition(120,3,2),126);assert.equal(localPosition(126,120,2),3);assert.equal(mediaPosition(126,3,1),129);assert.equal(localPosition(119,120,2),0)});

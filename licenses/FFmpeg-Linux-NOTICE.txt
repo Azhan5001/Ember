@@ -1,0 +1,14 @@
+Ember for Linux bundles a compact build of FFmpeg and FFprobe 8.1.3.
+This build is distributed under the GNU General Public License version 3.
+The corresponding FFmpeg release, its checksum and build configuration are
+recorded in scripts/build-linux-media.sh in the Ember source archive.
+FFmpeg source: https://ffmpeg.org/releases/ffmpeg-8.1.3.tar.xz
+
+The RPM build statically links libvpx 1.15.0, Opus 1.5.2, and x264 build 164.
+Upstream sources and licenses:
+https://chromium.googlesource.com/webm/libvpx/+/refs/tags/v1.15.0
+https://opus-codec.org/
+https://code.videolan.org/videolan/x264/-/tree/31e19f9
+The packaged tools also use the system OpenSSL, zlib and dav1d libraries.
+
+0.7.3 enables atempo for audio speed conversion. Codec copyright notices are included alongside this notice.

@@ -1,0 +1,128 @@
+{
+  "version": "0.4.0",
+  "platform": "Windows x64",
+  "featureChecksPassed": 104,
+  "javascriptChecks": 41,
+  "rustChecks": 8,
+  "installerChecks": [
+    "Legacy upgrade location accepted",
+    "Unrelated version rejected",
+    "Ambiguous command rejected",
+    "Existing Tauri location retained"
+  ],
+  "suites": {
+    "profiles": {
+      "passed": 7,
+      "results": [
+        "First launch offers Guest and sign-in entry",
+        "Guest playback preference is editable",
+        "Account starts separately from guest settings",
+        "Profile creation, picture selection and PIN gate work",
+        "Separate profile keeps playback settings and addons isolated",
+        "Sign out restores local guest and keeps account data sealed separately",
+        "Second device downloads isolated profile settings, PIN, and addon choice"
+      ]
+    },
+    "audio": {
+      "passed": 2,
+      "results": [
+        "Direct playback changes to the same source in native mode without losing position",
+        "English selection chooses the English embedded track, not the Japanese track"
+      ]
+    },
+    "native": {
+      "passed": 6,
+      "results": [
+        "Rust mpv launch plays and forwards provider request headers",
+        "Native handoff preserves time, paused state, zero volume and subtitle-off preference",
+        "Ordinary native subtitles are loaded",
+        "Failed native preparation leaves the old video playing",
+        "Cancelled native replacement cannot commit over current playback",
+        "Native command and network protocol boundaries reject unsupported requests"
+      ]
+    },
+    "accounts": {
+      "passed": 7,
+      "results": [
+        "Email/password login opens a separate account profile through the tested SQL RPC",
+        "Changing display name uploads only its specific record",
+        "Failed network request leaves a durable local mutation queue across restart",
+        "A conflicting device edit is preserved for review; choosing cloud explicitly resolves it",
+        "Signing out returns to the separate local guest profile",
+        "Registration displays email-code confirmation and verified signup enters the account",
+        "Recovery code allows setting a new password even after verification creates a session"
+      ]
+    },
+    "playback": {
+      "passed": 17,
+      "results": [
+        "Home displays fixture catalogs through the Rust HTTP bridge",
+        "Retired workers have no frontend bridge entry points",
+        "Catalog rows show the next card peeking on the right with a full first card on the left",
+        "Matching chevron arrows wrap in both directions",
+        "Player controls end with Languages, Settings, Episodes, Fullscreen in the requested order",
+        "One Languages click exposes audio, subtitle languages and tracks; ordinary captions still render",
+        "Episodes keeps season filtering and no longer shows segment-loading status",
+        "Smart intro skip still works after removing analysis; retired feature settings and end-autoplay toggle are absent",
+        "Smart recap skip advances to the recap end",
+        "Quality handoff preserves the timestamp and paused state",
+        "Timeline hover produces no preview, no provider thumbnail request and no extra video request",
+        "Failed manual quality change keeps the original playback",
+        "Episode ending advances automatically even with a legacy autoplay=false profile",
+        "Optional early-outro advances to the next episode before EOF",
+        "Normal close saves progress, migration removes retired preferences and a restart resumes the episode",
+        "Returning Home reuses catalog metadata without repeating provider calls",
+        "An unavailable provider stops after three automatic source attempts without a loading/retry loop"
+      ]
+    },
+    "discovery": {
+      "passed": 12,
+      "results": [
+        "All 40 home catalogs exist while only nearby rows load, with at most four metadata requests active",
+        "A broken card poster automatically loads its alternate URL",
+        "Exhausted card URLs use an installed alternate metadata provider without duplicate lookup requests",
+        "Scrolling can load the final catalog beyond the old limit",
+        "Multiple genres require AND; missing genres are verified through metadata",
+        "K-drama uses Korean drama metadata and excludes Japanese drama",
+        "Top airing ranks the matching anime feed first while retaining unranked titles",
+        "Discover pagination preserves the provider anime resource type",
+        "Anime metadata keeps its original resource type and exposes episodes",
+        "Anime genre search includes catalogs without a search endpoint by matching fetched titles locally",
+        "An unconfigured anime-style addon is rejected with a configuration action rather than silently installed empty",
+        "No renderer exceptions; title bar and genre controls render together"
+      ]
+    }
+  },
+  "package": {
+    "passed": true,
+    "architecture": "x64",
+    "installedAppSHA256": "f8704d349c0274e4e742a9b976f4a650db30ff89c849e0b7df29e02c6a3a9081",
+    "bundledMpvSHA256": "8c2e4d24eb961723cc5e2f1f4401982836e82c96e0e0a944c0576090fc48993f",
+    "electronAbsent": true
+  },
+  "size": {
+    "oldInstallerBytes": 124618895,
+    "newInstallerBytes": 37937240,
+    "installerReductionPercent": 69.56,
+    "oldProgramBytes": 426279895,
+    "newProgramBytes": 130393205.0,
+    "programReductionPercent": 69.41
+  },
+  "memory": {
+    "method": "Seven one-second samples after ten-second warmup; sum of process working sets including webview children, shared pages may be counted more than once. Identical 36-title local fixture and local WebM; each app runs alone. This is a controlled workload, not a universal RAM guarantee.",
+    "successfulCandidateRun": {
+      "originalIdleMiB": 409.80078125,
+      "emberIdleMiB": 342.33203125,
+      "originalPlaybackMiB": 532.39453125,
+      "emberPlaybackMiB": 469.97265625,
+      "idleReductionPercent": 16.46,
+      "playbackReductionPercent": 11.72
+    },
+    "finalRepeat": "The final binary run recorded idle values, then its test browser closed during playback. A new desktop test helper was rejected by automatic Computer Use approval."
+  },
+  "limits": [
+    "The exact Hope (2026) and Cyberpunk source encodes were unavailable; local media/provider fixtures tested codec and audio fallback.",
+    "Cloud HTTP and SQL tests used mocked authentication and local PostgreSQL, not the live user account.",
+    "Linux, Android, macOS and iOS need platform adapters and testing."
+  ]
+}

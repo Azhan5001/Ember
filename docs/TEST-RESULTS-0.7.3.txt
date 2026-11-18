@@ -1,0 +1,20 @@
+✔ advancing playback clears waiting without requiring a large buffer (0.925336ms)
+✔ real waiting is debounced and progress clears the notice (0.195385ms)
+✔ silent stalls are detected; pause and source changes are not stalls (0.12654ms)
+✔ native speed conversion preserves source timeline and seek coordinates (0.127392ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 78.119744
+
+Decoder smoke test:
+v:0: 4 seconds -> 2.083 seconds at 2x
+a:0: 4 seconds -> 2.000 seconds at 2x
+
+Builds: TypeScript, Vite production web, Linux Rust release, and RPM packaging passed.
+Bundled RPM decoder matches the rebuilt atempo-capable binary.
+Limit: no end-to-end playback test on the user’s Fedora device.

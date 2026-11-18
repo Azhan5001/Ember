@@ -1,0 +1,25 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {PGlite} from '@electric-sql/pglite';
+import {capture,newMeta,receive,resolveConflicts,project,equal} from '../src/sync-core.mjs';import {mergeProgressState} from '../src/progress-state.mjs';
+const state=()=>({profile:'You',settings:{quality:1080,native:true,traktToken:'private'},addons:[],library:[],progress:{},_sync:newMeta('a')});
+const uuid=()=>String(Math.random());
+test('only changed records queue; tokens stay local; equivalent JSON key order is stable',()=>{let s=capture(state(),uuid);assert.equal('setting:traktToken' in s._sync.pending,false);assert.equal('setting:native' in s._sync.pending,false);const sent=Object.values(s._sync.pending);s=receive(s,{acks:sent.map((o,i)=>({...o,revision:i+1})),records:[],cursor:2},sent);assert.equal(Object.keys(capture(s,uuid)._sync.pending).length,0);s=capture({...s,settings:{...s.settings,quality:720}},uuid);assert.deepEqual(Object.keys(s._sync.pending),['setting:quality']);assert.ok(equal({b:1,a:2},{a:2,b:1}));});
+test('edit during upload survives acknowledgement; retry retains mutation; conflict requires explicit resolution',()=>{let s=capture(state(),uuid),sent=Object.values(s._sync.pending);s=capture({...s,profile:'New name'},uuid);s=receive(s,{acks:sent.map((o,i)=>({...o,revision:i+1})),records:[],cursor:2},sent);assert.ok(s._sync.pending['profile:name']);assert.equal(s.profile,'New name');const mutation=s._sync.pending['profile:name'].mutation;s=capture(s,uuid);assert.equal(s._sync.pending['profile:name'].mutation,mutation);s=receive(s,{records:[],conflicts:[{id:'profile:name',data:'Remote',deleted:false,revision:8}],cursor:8});assert.equal(s.profile,'New name');assert.ok(s._sync.pending['profile:name'].conflict);const remote=resolveConflicts(s,false);assert.equal(remote.profile,'Remote');assert.equal(Object.keys(remote._sync.pending).length,0);const local=resolveConflicts(s,true);assert.equal(local._sync.pending['profile:name'].base,8);assert.equal(local._sync.pending['profile:name'].conflict,false);});
+test('tombstones and cloud rewatches survive SQLite merge without resurrecting old progress',()=>{const old={progress:{ep:{updatedAt:100,position:80}},_sync:{owner:'a',revisions:{'progress:ep':1}}};assert.equal('ep' in mergeProgressState(old,{progress:{},_sync:{owner:'a',revisions:{'progress:ep':2}}}).progress,false);assert.equal(mergeProgressState(old,{progress:{ep:{updatedAt:50,position:10}},_sync:{owner:'a',revisions:{'progress:ep':2}}}).progress.ep.position,10);assert.equal('ep' in mergeProgressState(old,{progress:{},_sync:{owner:'b'}}).progress,false);});
+test('database migration reruns, isolates accounts, rejects guests/direct writes, replays requests and paginates',async()=>{
+ const db=new PGlite();try{
+ await db.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema auth to authenticated;grant execute on function auth.uid() to authenticated;insert into auth.users values('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002');`);
+ const sql=fs.readFileSync('supabase/ember-supabase-setup.sql','utf8');await db.exec(sql);await db.exec(sql);
+ await db.exec('set role anon');await assert.rejects(db.query("select public.ember_sync_v1(0,'[]')"));await db.exec('reset role;set role authenticated');
+ await db.exec("select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false)");
+ const rpc=async(cursor,changes)=>(await db.query('select public.ember_sync_v1($1,$2::jsonb) as result',[cursor,JSON.stringify(changes)])).rows[0].result;
+ const op={id:'profile:name',base:0,mutation:'m1',data:'A',deleted:false};let r=await rpc(0,[op]);assert.equal(r.records[0].data,'A');assert.equal(r.head,1);assert.equal((await rpc(1,[op])).head,1);
+ r=await rpc(1,[{...op,mutation:'m2',data:'stale'}]);assert.equal(r.conflicts.length,1);assert.equal(r.head,1);
+ await assert.rejects(db.query("insert into public.ember_sync_records(user_id,id,data,revision,mutation) values(auth.uid(),'profile:bad','null',1,'x')"));
+ await db.exec("select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',false)");assert.equal((await rpc(0,[])).records.length,0);
+ await rpc(0,[{...op,data:'B'}]);await db.exec("select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false)");assert.equal((await rpc(0,[])).records[0].data,'A');
+ for(let j=0;j<6;j++)await rpc(0,Array.from({length:100},(_,i)=>({id:'setting:k'+(j*100+i),base:0,mutation:'key'+(j*100+i),data:i,deleted:false})));
+ r=await rpc(0,[]);assert.equal(r.records.length,500);assert.ok(r.more);const rest=await rpc(r.cursor,[]);assert.equal(rest.records.length,101);assert.equal(rest.more,false);
+ r=await rpc(rest.cursor,[{...op,base:1,mutation:'delete',deleted:true,data:null}]);assert.equal(r.records[0].deleted,true);
+ }finally{await db.close()}
+});
+

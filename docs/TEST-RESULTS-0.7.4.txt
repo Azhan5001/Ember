@@ -1,0 +1,13 @@
+Ember 0.7.4 focused validation
+
+PASS TypeScript/Vite production build.
+PASS two media regressions: episode backup matching and absolute subtitle timestamps.
+PASS actual generated MKV: subtitle extracted after seeking retains its 65-second absolute timestamp.
+PASS download worker protocol: response headers and 256 KB streamed bytes match.
+PASS native streamed-file download and cancellation; partial file removed.
+PASS local BitTorrent swarm range playback without debrid.
+PASS Linux release build and RPM decoder hashes/executable permissions.
+PASS Windows x64 release build and NSIS package; extracted executable and decoder hashes match.
+
+PASS Android ARM64 release packaging, APK signature verification, ZIP integrity and 16 KB ELF alignment for the app and both media helpers.
+Browser UI execution was blocked by the workspace socket restriction. No Windows, Android or Fedora user-device end-to-end playback test is claimed. No repeated broad suite was run.

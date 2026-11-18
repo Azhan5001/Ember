@@ -1,0 +1,8 @@
+import React,{useEffect,useState} from 'react';
+import {downloadList,cancelDownload,type DownloadJob} from './downloads';
+const size=(n:number)=>n>1073741824?(n/1073741824).toFixed(2)+' GB':(n/1048576).toFixed(1)+' MB';
+export default function DownloadsPanel(){
+ const [jobs,setJobs]=useState<DownloadJob[]>([]);
+ useEffect(()=>{let live=true;const refresh=()=>void downloadList().then(j=>{if(live)setJobs(j)});refresh();const t=setInterval(refresh,1000);return()=>{live=false;clearInterval(t)}},[]);
+ return <section className="downloads-panel"><h2>Downloads</h2><p>{window.ember?(window.ember.platform==='android'?'Saved in Ember’s app downloads on this device. Keep Ember open until finished.':'Saved in Downloads / Ember. Keep Ember open until finished.'):'Saved using your browser’s downloads. Keep this tab open until finished.'}</p>{!jobs.length&&<p>Open a movie or episode, choose a source, then select Download.</p>}{jobs.map(j=><article key={j.id}><strong>{j.name}</strong><small>{j.state==='downloading'?`${size(j.bytes)}${j.total?' / '+size(j.total):' · Finding peers or connecting…'}`:j.state==='complete'?'Download complete':j.error||j.state}</small>{j.state==='downloading'&&<><progress max={j.total||undefined} value={j.total?j.bytes:undefined}/><button className="glass" onClick={()=>void cancelDownload(j.id)}>Cancel</button></>}{j.path&&<button className="glass" onClick={()=>void window.ember?.downloadOpen?.(j.id).catch(e=>alert(String(e)))}>Open file</button>}{j.path&&<small className="download-path">{j.path}</small>}</article>)}</section>
+}

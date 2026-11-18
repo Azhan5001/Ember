@@ -1,0 +1,9 @@
+# Ember 0.7.4
+
+Implemented downloads with progress and cancel (native separate torrent session, streamed HTTP files, web Service Worker streaming), subtitle height, lower mobile caption baseline, a single fading status stack, source/quality action distinction, parent-series episode thumbnail lookup with TVmaze and mapped Kitsu fallback, YouTube referrer repair and native HTTP trailer wrapper. Raw torrents now use the native peer engine without TorBox; browsers still need direct/debrid sources because ordinary BitTorrent peers require TCP/UDP.
+
+Embedded subtitle extraction now uses bounded seek windows and preserves absolute timestamps with copyts/avoid_negative_ts disabled. The real generated MKV test reproduced the old SRT timestamp-shifting error, then passed with the correction. Browser-exposed text tracks are also selectable. Android's ARM64 FFmpeg helper supports text extraction and video-copy/AAC compatibility; bitmap subtitles require a desktop or external text subtitle.
+
+Windows x64 NSIS, Fedora/Linux x64 RPM and Cloudflare Pages ZIP are built and saved. Their required build and package checks pass. Android ARM64 APK is built and signed; signature and package checks pass. The native app and both media helpers support 16 KB page alignment. Android 7.0 or later and an updated system WebView are required. The Windows installer has no publisher signature. See TEST-RESULTS-0.7.4.txt for focused checks. No end-to-end validation on the user's devices is claimed.
+
+Downloads remain on disk; keep the app/tab open while downloading. Android downloads are stored in the app's external Downloads/Ember directory (removed on uninstall), with Open file support. Web downloads require HTTPS, Service Workers and provider CORS; failed providers can be downloaded by the desktop app. HLS downloads are not supported yet. Missing provider artwork cannot be invented; no unrelated title images are substituted.

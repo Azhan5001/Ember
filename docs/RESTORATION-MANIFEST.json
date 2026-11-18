@@ -1,0 +1,202 @@
+{
+  "attached_source": "ember(2).zip",
+  "attached_source_sha256": "a3b9a53d0cbfb8906aa6051480718a67355262fd919ac18d68083d7b90bd1317",
+  "attached_rpm": "Ember-0.5.2-1.x86_64(1).rpm",
+  "attached_rpm_sha256": "1b897201c902becc91ba3a2a0f469befcc93ae8ee76b218a72b6bd2c1ada9bd0",
+  "rpm_header": {
+    "name": "ember",
+    "version": "0.5.2",
+    "release": "1",
+    "architecture": "x86_64"
+  },
+  "source_chain": [
+    {
+      "from": "0.5.0",
+      "to": "0.5.1",
+      "changes": [
+        {
+          "path": "package-lock.json",
+          "status": "changed"
+        },
+        {
+          "path": "package.json",
+          "status": "changed"
+        },
+        {
+          "path": "scripts/fetch-ffmpeg.py",
+          "status": "added"
+        },
+        {
+          "path": "scripts/ffmpeg-assets.json",
+          "status": "added"
+        },
+        {
+          "path": "scripts/package-source.py",
+          "status": "changed"
+        },
+        {
+          "path": "src/Player.tsx",
+          "status": "changed"
+        },
+        {
+          "path": "src/api.ts",
+          "status": "changed"
+        },
+        {
+          "path": "src/embedded-media.ts",
+          "status": "added"
+        },
+        {
+          "path": "src/main.tsx",
+          "status": "changed"
+        },
+        {
+          "path": "src/platform.ts",
+          "status": "changed"
+        },
+        {
+          "path": "src/style.css",
+          "status": "changed"
+        },
+        {
+          "path": "src/video-frame-core.mjs",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/Cargo.lock",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/Cargo.toml",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/src/lib.rs",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/src/media.rs",
+          "status": "added"
+        },
+        {
+          "path": "src-tauri/src/network.rs",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/src/player.rs",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/src/server.rs",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/src/storage.rs",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/src/torrents.rs",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/tauri.conf.json",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/tauri.linux.conf.json",
+          "status": "added"
+        },
+        {
+          "path": "src-tauri/tauri.windows.conf.json",
+          "status": "added"
+        }
+      ]
+    },
+    {
+      "from": "0.5.1",
+      "to": "0.5.2",
+      "changes": [
+        {
+          "path": "package-lock.json",
+          "status": "changed"
+        },
+        {
+          "path": "package.json",
+          "status": "changed"
+        },
+        {
+          "path": "scripts/build-linux-media.sh",
+          "status": "added"
+        },
+        {
+          "path": "scripts/package-source.py",
+          "status": "changed"
+        },
+        {
+          "path": "src/Player.tsx",
+          "status": "changed"
+        },
+        {
+          "path": "src/api.ts",
+          "status": "changed"
+        },
+        {
+          "path": "src/core.mjs",
+          "status": "changed"
+        },
+        {
+          "path": "src/embedded-media.ts",
+          "status": "changed"
+        },
+        {
+          "path": "src/platform.ts",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/Cargo.lock",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/Cargo.toml",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/src/lib.rs",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/src/media.rs",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/src/remote.rs",
+          "status": "added"
+        },
+        {
+          "path": "src-tauri/src/resources.rs",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/src/server.rs",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/src/torrent_space.rs",
+          "status": "added"
+        },
+        {
+          "path": "src-tauri/src/torrents.rs",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/tauri.conf.json",
+          "status": "changed"
+        },
+        {
+          "path": "src-tauri/tauri.linux.conf.json",
+          "status": "changed"
+        }
+      ]
+    }
+  ]
+}

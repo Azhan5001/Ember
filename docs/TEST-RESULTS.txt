@@ -1,0 +1,82 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> ember-desktop@0.7.0 test
+> node --test tests/core.test.mjs tests/catalog-discovery.test.mjs tests/catalog-cache.test.mjs tests/default-migration.test.mjs tests/progress.test.mjs tests/sync.test.mjs tests/profiles-v04.test.mjs tests/history-recommendations.test.mjs tests/history-lock.test.mjs tests/web-delivery.test.mjs tests/party.test.mjs tests/release-070.test.mjs
+
+✔ revisiting Home reuses fresh results; explicit refresh fetches again (2.171239ms)
+✔ overlapping catalog requests share one in-flight operation (0.313056ms)
+✔ failed refresh retains stale metadata and permits a later retry (0.820624ms)
+✔ all catalogs and custom types are planned without a four-row cap (6.088239ms)
+✔ required search/context feeds do not become unusable home rows; legacy extras work (0.779678ms)
+✔ genre AND is exact and retains one server prefilter while checking remaining genres locally (0.983253ms)
+✔ anime provenance and explicit Korean drama classification survive normalization and merging (1.109341ms)
+✔ sort does not equate vote counts to ratings or completed shows to top airing (1.404705ms)
+✔ provider-declared sort extras, genre choices and resource types remain interoperable (0.961701ms)
+✔ artwork fallbacks only use supplied URLs or exact IDs, never title guesses (0.57978ms)
+✔ catalogs without a search endpoint remain locally searchable instead of disappearing (0.749302ms)
+✔ cached HTTP outranks high seed torrent (2.667506ms)
+✔ quality filter and failover exclude attempted sources (1.30486ms)
+✔ episode order crosses seasons and excludes specials (0.552586ms)
+✔ manifest filters custom prefixes and resources (0.467319ms)
+✔ manifest URL parsing preserves configured path (0.76432ms)
+✔ resource identifiers and search args encoded (0.409794ms)
+✔ rewatches permit earlier positions but stale writes rejected (0.37436ms)
+✔ completion preserves explicit watched setting (0.264637ms)
+✔ selected resolution picks the best seeded torrent even above 1000 seeds (0.584428ms)
+✔ Linux auto playback keeps cached provider sources ahead of quality fallbacks (2.107481ms)
+✔ Fedora Live selects HTTP sources while identifying torrents and browser-only sources (3.943903ms)
+✔ enabled TorBox Torrentio takes precedence over the stock Torrentio instance (1.26442ms)
+✔ upgrading installs the checked anime catalog once and keeps configured provider secrets and disabled state (1.418426ms)
+✔ official starter manifests retain genre/pagination declarations and anime stream IDs (0.247567ms)
+✔ guest can protect history with a separate salted PIN without an account (359.612526ms)
+✔ profile mode uses the current profile PIN without copying its digest into settings (541.900478ms)
+✔ history access identity changes with profile and lock settings (0.346669ms)
+✔ five incorrect attempts enforce a cooldown across reopened checks (1137.816151ms)
+✔ portable PIN hashing matches Web Crypto for existing stored PINs (1400.064727ms)
+✔ movie qualifies at 5% unique coverage, not seeks or repeated ranges (8.895123ms)
+✔ series qualifies at 5% of any one episode, not the sum of short starts (0.512352ms)
+✔ range validation handles unknown durations, repeated overlaps, and malicious numeric data (0.819676ms)
+✔ continue removal does not erase history; clearing can preserve continue or hide without resurrection (1.15089ms)
+✔ history stays isolated across profiles, compact save/reload and guest entry (2.166213ms)
+✔ guest default migration removes only stock Torrentio once, preserving configured addons and explicit reinstalls (0.983582ms)
+✔ history records and deletions sync within their profile namespace (2.828382ms)
+✔ personal recommendations favor matching metadata, exclude watched aliases, and explain matches (9.360745ms)
+✔ cold start, sparse metadata, deduplication and cultural features do not invent nationality (0.936258ms)
+✔ party metadata excludes secrets; frozen timeline and drift correction (2.674254ms)
+✔ authenticated room: sub-users, buffering, commands, runtime mismatch, handover, RLS (2422.885074ms)
+✔ guest and account spaces keep progress, settings, and addons apart (3.964078ms)
+✔ isolated addons, profile deletion and local sync setting (1.12115ms)
+✔ PIN is salted, verifies four digits and never stores plaintext (467.607502ms)
+✔ cloud projection includes every account profile but no guest records (1.763404ms)
+✔ remote profile records apply to their own space (1.021365ms)
+✔ TorrentioTB catalogs are omitted while stream addon remains enabled (0.791329ms)
+✔ different provider IDs for the same title merge; search ranks unknown metadata last (1.432476ms)
+✔ unsupported codec hints and progressing audio with no frames trigger native handoff (0.459694ms)
+✔ multi-profile SQL migration accepts scoped records and preserves account RLS (2839.86016ms)
+✔ serialized profile state omits duplicate active data and restores it (1.067752ms)
+✔ Japanese to English audio selects the correct embedded track and source fallback (0.491413ms)
+✔ old account archives migrate into isolated cached profiles without duplicate storage (0.301451ms)
+✔ profile backup snapshot excludes other accounts and sync metadata (0.153937ms)
+✔ newer durable checkpoint survives a delayed full-state write (0.974609ms)
+✔ continue watching picks latest unfinished episode and preserves per-episode indicators (0.328631ms)
+✔ search removes unrelated results and merges same IDs or title/year without merging remakes (3.114761ms)
+✔ clean default catalog labels and additional genre choices (0.836616ms)
+✔ watched threshold is 90%; explicit outro completion persists (0.289877ms)
+✔ only changed records queue; tokens stay local; equivalent JSON key order is stable (2.301986ms)
+✔ edit during upload survives acknowledgement; retry retains mutation; conflict requires explicit resolution (0.766176ms)
+✔ tombstones and cloud rewatches survive SQLite merge without resurrecting old progress (0.263309ms)
+✔ database migration reruns, isolates accounts, rejects guests/direct writes, replays requests and paginates (2848.196434ms)
+(node:116) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/scratch/adc906d134c9/ember/web/_worker.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/scratch/adc906d134c9/ember/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ HTML and build metadata are revalidated after deploying a new release (7.891324ms)
+✔ TorBox lookup still rejects missing credentials and foreign origins (1.536536ms)
+ℹ tests 65
+ℹ suites 0
+ℹ pass 65
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3662.613427

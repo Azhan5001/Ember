@@ -1,0 +1,13 @@
+✔ timeline rejects unknown duration and zero width (1.041319ms)
+✔ paused ready frame does not deadlock a party; real stalls hold it (0.202815ms)
+✔ manual release preference survives episode-specific URLs and filenames (1.519179ms)
+✔ subtitle delay preferences span episodes but stay isolated per series/track (0.31248ms)
+✔ catalog labels retain category and media type without built-in provider prefix (0.77015ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 294.278601

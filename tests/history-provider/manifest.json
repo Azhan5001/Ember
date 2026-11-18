@@ -1,0 +1,1 @@
+{"id": "ember.test.history", "name": "Local UI fixture", "version": "1.0.0", "resources": ["catalog", "meta", "stream"], "types": ["movie"], "idPrefixes": ["ember-test"], "catalogs": [{"id": "test", "name": "Playback validation", "type": "movie"}]}

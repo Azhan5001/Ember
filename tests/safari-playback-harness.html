@@ -1,0 +1,19 @@
+<!doctype html><html><body style="background:#222;color:white;font:16px system-ui"><video id="video" controls muted playsinline width="560"></video><p><button id="start">Start MKV compatibility stream</button><button id="dts">Play DTS audio fixture</button><button id="seek">Seek to 35 seconds</button><button id="audio">Switch to Japanese track</button><button id="stop">Stop and release buffers</button></p><pre id="status"></pre><script type="module">
+import {browserRemux} from '/src/browser-remux.ts';
+const video=document.querySelector('video'),status=document.querySelector('#status');
+let controller,session,track=0,file="safari-fixture.mkv";
+async function start(position=0){
+ controller?.abort();controller=new AbortController();status.textContent='Preparing';
+ try{
+  session=await browserRemux(video,location.origin+'/tests/'+file,position,track,controller.signal);
+  video.onloadedmetadata=()=>{video.currentTime=Math.max(0,position-session.start)};
+  await video.play();status.textContent='Playing '+JSON.stringify({duration:session.duration,start:session.start,audio:session.audio,tracks:session.tracks,transcoded:session.transcodeAudio});
+ }catch(e){status.textContent='Failed '+e.message}
+}
+document.querySelector('#start').onclick=()=>start();
+document.querySelector('#dts').onclick=()=>{file='safari-dts.mkv';track=0;start()};
+document.querySelector('#seek').onclick=()=>start(35);
+document.querySelector('#audio').onclick=()=>{track=1;start((session?.start||0)+video.currentTime)};
+document.querySelector('#stop').onclick=()=>{controller?.abort();video.pause();video.removeAttribute('src');video.load();status.textContent='Stopped'};
+setInterval(()=>{if(session?.stream.error())status.textContent='Failed '+session.stream.error()},200);
+</script></body></html>

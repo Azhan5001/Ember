@@ -1,0 +1,16 @@
+{
+  "bundle": {
+    "resources": {
+      "../vendor/media/linux/ffmpeg": "media/ffmpeg",
+      "../vendor/media/linux/ffprobe": "media/ffprobe",
+      "../vendor/media/linux/LICENSE.txt": "licenses/FFmpeg-LICENSE.txt",
+      "../licenses/FFmpeg-Linux-NOTICE.txt": "licenses/FFmpeg-NOTICE.txt",
+      "../licenses/libvpx-copyright.txt": "licenses/libvpx-copyright.txt",
+      "../licenses/libopus-copyright.txt": "licenses/libopus-copyright.txt",
+      "../licenses/libx264-copyright.txt": "licenses/libx264-copyright.txt"
+    },
+    "targets": [
+      "rpm"
+    ]
+  }
+}

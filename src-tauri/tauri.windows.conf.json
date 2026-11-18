@@ -1,0 +1,13 @@
+{
+  "bundle": {
+    "resources": {
+      "../vendor/media/ffmpeg.exe": "media/ffmpeg.exe",
+      "../vendor/media/ffprobe.exe": "media/ffprobe.exe",
+      "../vendor/media/LICENSE.txt": "licenses/FFmpeg-LICENSE.txt",
+      "../licenses/FFmpeg-NOTICE.txt": "licenses/FFmpeg-NOTICE.txt"
+    },
+    "targets": [
+      "nsis"
+    ]
+  }
+}
