@@ -1,0 +1,107 @@
+name: Build installers
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-installers.yml'
+permissions:
+  contents: read
+concurrency:
+  group: installer-build-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test && npm run test:release && npm run build
+      - run: python3 web/package.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ember-web
+          path: ../Ember-Web-*-Cloudflare-Pages.zip
+          if-no-files-found: error
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: npm run package:win -- --ci
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ember-windows
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install Linux build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev patchelf rpm
+      - run: chmod +x vendor/media/linux/ffmpeg vendor/media/linux/ffprobe
+      - run: npm ci
+      - run: npm run package:linux -- --ci
+      - name: Inspect RPM
+        run: rpm -qip src-tauri/target/release/bundle/rpm/*.rpm && rpm -qlp src-tauri/target/release/bundle/rpm/*.rpm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ember-linux
+          path: src-tauri/target/release/bundle/rpm/*.rpm
+          if-no-files-found: error
+  android:
+    runs-on: ubuntu-24.04
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: android
+      - name: Install Android SDK and NDK
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;$NDK_VERSION"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: bash scripts/build-android-media.sh
+      - run: chmod +x src-tauri/gen/android/gradlew
+      - run: npm run tauri -- android build --target aarch64 --apk --ci
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ember-android-unsigned
+          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
