@@ -21,11 +21,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test && npm run test:release && npm run build
-      - run: python3 web/package.py
+      - run: python3 web/package.py && mkdir -p artifacts && cp ../Ember-Web-*-Cloudflare-Pages.zip artifacts/
       - uses: actions/upload-artifact@v4
         with:
           name: ember-web
-          path: ../Ember-Web-*-Cloudflare-Pages.zip
+          path: artifacts/Ember-Web-*-Cloudflare-Pages.zip
           if-no-files-found: error
   windows:
     runs-on: windows-2022
