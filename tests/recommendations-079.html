@@ -1,0 +1,6 @@
+<html><body><div id="root"></div><script type="module">
+import React from 'react';import {createRoot} from 'react-dom/client';import {useRecommendations} from '/src/use-recommendations';import {essentials} from '/src/defaults';
+const pool=[{id:'tt100001',type:'movie',name:'Action candidate',genres:['Action'],imdbRating:8},{id:'tt100002',type:'movie',name:'Romance candidate',genres:['Romance'],imdbRating:8}];
+const make=profile=>({profile,addons:essentials,_people:{owner:'fixture-account',activeId:profile},settings:{},history:{['movie:'+profile]:{item:{id:profile==='A'?'tt101':'tt102',type:'movie',name:profile==='A'?'Watched Action':'Watched Romance',genres:[profile==='A'?'Action':'Romance']},qualifiedAt:1,lastWatched:Date.now(),fraction:.8}}});
+function Test(){const [state,setState]=React.useState(()=>make('A'));const picks=useRecommendations(pool,state,null,true);return React.createElement('main',{},React.createElement('button',{onClick:()=>setState(make('B'))},'Profile B'),React.createElement('button',{onClick:()=>setState(s=>({...s,history:{}}))},'Clear history'),React.createElement('pre',{id:'picks'},JSON.stringify(picks)));}createRoot(document.getElementById('root')).render(React.createElement(Test));
+</script></body></html>

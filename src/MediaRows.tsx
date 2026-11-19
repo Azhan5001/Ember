@@ -263,7 +263,7 @@ export function CatalogRow({ row, open }: any) {
 
       </button>
     ));
-  if(row.loaded && !row.loading && !row.error && !row.items.length)return null;
+  if(row.loaded && !row.loading && !row.error && !row.items.length&&!row.showEmpty)return null;
   return (
     <section className="section catalogrow" ref={ref}>
       <div className="sectionhead">
@@ -275,7 +275,7 @@ export function CatalogRow({ row, open }: any) {
       </div>
       {visible && (!row.loaded || row.loading) && !row.items.length && <div className="catalogstatus">Loading catalog…</div>}
       {visible && row.error && <button className="glass" onClick={()=>{row.loaded=false;void row.load();}}>Retry this catalog</button>}
-      {visible && row.loaded && !row.loading && !row.error && !row.items.length && <div className="catalogstatus">No titles in this catalog yet.</div>}
+      {visible && row.loaded && !row.loading && !row.error && !row.items.length && <div className="catalogstatus">{row.view==='weekly'?'No new anime premieres in these catalog pages this week.':'No titles in these catalog pages yet.'}</div>}
       {expanded ? (
         <div className="catalogexpanded">{cards}</div>
       ) : (

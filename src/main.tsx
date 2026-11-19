@@ -1,3 +1,6 @@
+import {useRecommendations} from './use-recommendations';
+import GenreFilter from './GenreFilter';
+import {facetOptions,hasAio,isAnimeFallback} from './metadata-provider.mjs';
 import DownloadsPanel from './DownloadsPanel';
 import TitleDetails from './TitleDetails';
 import {useWatchParty} from './use-watch-party';
@@ -136,8 +139,9 @@ function App() {
   const [torboxKey, setTorboxKey] = useState(playbackTorBoxKey);
   const [genres, setGenres] = useState<string[]>([]);
   const [sort, setSort] = useState("default");
+  const [facets,setFacets]=useState<Record<string,string>>({}),[draftFacets,setDraftFacets]=useState<Record<string,string>>({});
   const [filtersOpen,setFiltersOpen]=useState(false),[draftGenres,setDraftGenres]=useState<string[]>([]),[draftSort,setDraftSort]=useState("default");
-  const toggleFilters=()=>{if(!filtersOpen){setDraftGenres(genres);setDraftSort(sort)}setFiltersOpen(!filtersOpen)};
+  const toggleFilters=()=>{if(!filtersOpen){setDraftGenres(genres);setDraftSort(sort);setDraftFacets(facets)}setFiltersOpen(!filtersOpen)};
   const [catalogResult,setCatalogResult] = useState<any>(null);
   const [moreBusy,setMoreBusy] = useState(false);
   const [detailSeason, setDetailSeason] = useState(1);
@@ -248,7 +252,7 @@ function App() {
           };
           const r = await catalogs(state.addons, page === "Home" ? "all" : type, page === "Home" ? "" : query, {
             force, lazy: page === "Home", genres: page === "Home" ? [] : genres,
-            sort: page === "Home" ? "default" : sort,
+            sort: page === "Home" ? "default" : sort, facets:page === "Home" ? {} : facets,
             active: () => id === fetchId.current,
             onUpdate: publish,
           });
@@ -289,7 +293,7 @@ function App() {
       clearTimeout(timer);
       fetchId.current++;
     };
-  }, [state?.addons, type, query, page, refresh, !!session, genres, sort]);
+  }, [state?.addons, type, query, page, refresh, !!session, genres, sort, facets]);
   useEffect(() => {
     if (!traktCode) return;
     let stopped = false;
@@ -349,7 +353,7 @@ function App() {
     const metadataRefresh=item.type==='series'?metadata(state.addons,item):Promise.resolve(item);
     if(item.type === "series" && !item.videos?.length) { item=await metadataRefresh; if(id!==playId.current)return; }
     video=item.videos?.find((v:any)=>v.id===video?.id)||video;
-    const vid = video?.id || item.id;
+    const vid = video?.id || (item.type==='movie'&&/^tt\d+$/.test(item.imdb_id||'')?item.imdb_id:item.id);
     if(Date.parse(video?.released||video?.firstAired)>Date.now())return;
     const started = performance.now();
     const sources =
@@ -474,7 +478,8 @@ function App() {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     setNotice("Backed up this profile. The file may contain addon URLs and tokens; keep it private.");
   }
-  const picks = useMemo(()=>recommend(items,state?.history).map((i:any)=>state?.settings?.historyLock?.mode && state.settings.historyLock.mode!=='off' ? {...i,recommendationReason:"Picked from your viewing preferences"} : i),[items,state?.history,state?.settings?.historyLock]);
+  const recommendationView=(page==="Home"||page==="Discover"&&!query&&!genres.length&&sort==="default"&&!Object.keys(facets).length)&&!session;
+  const picks=useRecommendations(items,state,catalogResult,recommendationView);
   if (!state)
     return (
       <div className="boot">
@@ -639,7 +644,7 @@ function App() {
                   remove={removeContinue}
                 />
               )}
-              {page === "Home" && !!picks.length && <CatalogRow row={{name:historyItems(state.history).length ? "Picked for you" : "Discover your taste",items:picks,loaded:true}} open={open}/>}
+              {recommendationView && !!picks.length && <CatalogRow row={{name:historyItems(state.history).length ? "Picked for you" : "Discover your taste",items:picks,loaded:true}} open={open}/>}
               {catalogError && page !== "Library" && (
                 <div className="panel">
                   <h3>Catalog connection issue</h3>
@@ -653,7 +658,7 @@ function App() {
               )}
               {page === "Home" ? (
                 rows.map((row) => (
-                  <CatalogRow key={row.url || row.name} row={row} open={open} />
+                  <CatalogRow key={row.key || row.url || row.name} row={row} open={open} />
                 ))
               ) : (
                 <>
@@ -672,9 +677,9 @@ function App() {
                       </span>
                     </div>
                     <div className="discovertools"><button className="glass" aria-expanded={filtersOpen} aria-controls="catalog-filters" onClick={toggleFilters}><SlidersHorizontal size={18}/>Genres <b>{genres.length || "All"}</b></button><button className="glass" aria-expanded={filtersOpen} aria-controls="catalog-filters" onClick={toggleFilters}>Sort by <b>{SORTS[sort as keyof typeof SORTS]}</b></button></div>
-                    {filtersOpen&&<section id="catalog-filters" className="catalogfilters" aria-label="Genres and sorting"><div className="sectionhead"><h2>Refine your catalog</h2><button className="icon" aria-label="Close filters" onClick={()=>setFiltersOpen(false)}><X/></button></div><h3>Genres</h3><p>Titles must match every selection. Adult and nudity filters depend on labels supplied by your addons.</p><div className="filterchips"><button aria-pressed={!draftGenres.length} onClick={()=>setDraftGenres([])}>All genres</button>{genreOptions(state.addons).map((g:string)=><button key={g} aria-pressed={draftGenres.includes(g)} onClick={()=>setDraftGenres(old=>old.includes(g)?old.filter(x=>x!==g):[...old,g])}>{g}</button>)}</div>{page!=="Library"&&<><h3>Sort by</h3><div className="filterchips">{Object.entries(SORTS).map(([v,label])=><button key={v} aria-pressed={draftSort===v} onClick={()=>setDraftSort(v)}>{label}</button>)}</div></>}<div className="actions"><button className="primary" onClick={()=>{setGenres(draftGenres);setSort(draftSort);setFiltersOpen(false)}}>Apply filters</button><button className="glass" onClick={()=>{setDraftGenres([]);setDraftSort("default")}}>Reset</button></div></section>}
-                    {genres.length > 0 && <div className="activegenres">{genres.map(g=><button className="glass" key={g} aria-label={`Remove ${g} filter`} onClick={()=>setGenres(old=>old.filter(x=>x!==g))}>{g}<X size={12}/></button>)}<button className="textbutton" onClick={()=>setGenres([])}>Clear genres</button></div>}
-                    {(genres.length > 0 || sort !== "default") && <p className="filterhint">{genres.length > 1 ? "Matches every selected genre (AND). " : ""}{sort !== "default" ? "Uses matching provider feeds and available metadata; provider rankings are not a universal score. " : ""}Country, language and genre metadata are combined across providers. Unranked titles follow ranked titles; load more to extend the results.</p>}
+                    {filtersOpen&&<section id="catalog-filters" className="catalogfilters" aria-label="Genres and sorting"><div className="sectionhead"><h2>Refine your catalog</h2><button className="icon" aria-label="Close filters" onClick={()=>setFiltersOpen(false)}><X/></button></div><p>Titles must match every selected tag. Labels are supplied by your catalog providers.</p><GenreFilter options={genreOptions(state.addons)} selected={draftGenres} onChange={setDraftGenres}/>{page!=="Library"&&hasAio(state.addons)&&<div className="catalogfacets">{['year','language','studio'].map(f=><label key={f}>{f==='year'?'Release year':f==='language'?'Original language':'Anime studio'}<select value={draftFacets[f]||''} onChange={e=>setDraftFacets(e.target.value?{[f]:e.target.value}:{})}><option value="">All</option>{facetOptions(state.addons,f).map((v:any)=><option key={v} value={v}>{v}</option>)}</select></label>)}<small>Browse one year, language or studio at a time. You can also select tags or search titles within it.</small></div>}{page!=="Library"&&<><h3>Sort by</h3><div className="filterchips">{Object.entries(SORTS).map(([v,label])=><button key={v} aria-pressed={draftSort===v} onClick={()=>setDraftSort(v)}>{label}</button>)}</div></>}<div className="actions"><button className="primary" onClick={()=>{setGenres(draftGenres);setSort(draftSort);setFacets(draftFacets);setFiltersOpen(false)}}>Apply filters</button><button className="glass" onClick={()=>{setDraftGenres([]);setDraftSort("default");setDraftFacets({})}}>Reset</button></div></section>}
+                    {Object.entries(facets).map(([f,v])=><button className="glass" key={f} onClick={()=>setFacets({})}>{v}<X size={12}/></button>)}{catalogResult?.ratingPending>0&&["rating","votes"].includes(sort)&&<p className="filterhint" role="status">Updating IMDb scores and vote counts for {catalogResult.ratingPending} titles…</p>}{genres.length > 0 && <div className="activegenres">{genres.map(g=><button className="glass" key={g} aria-label={`Remove ${g} filter`} onClick={()=>setGenres(old=>old.filter(x=>x!==g))}>{g}<X size={12}/></button>)}<button className="textbutton" onClick={()=>setGenres([])}>Clear genres</button></div>}
+                    {(genres.length > 0 || sort !== "default") && <p className="filterhint">{genres.length > 1 ? "Matches every selected genre (AND). " : ""}{sort !== "default" ? "Uses matching provider feeds and available metadata; provider rankings are not a universal score. " : ""}IMDb scores and vote counts refine rating-based sorts as they load. Counts refer to ratings, not written reviews. Country, language and genre metadata are combined across providers. Unranked titles follow ranked titles; load more to extend the results.</p>}
                     {busy && !visible.length ? (
                       <div className="postergrid">
                         {Array.from({ length: 6 }, (_, i) => (
@@ -729,7 +734,7 @@ function App() {
               )}
               <footer>
                 <Flame size={16} /> MADE FOR THE WAY YOU WATCH{" "}
-                <span>EMBER / 0.7.7</span>
+                <span>EMBER / 0.7.8</span>
               </footer>
             </>
           )}
@@ -807,7 +812,7 @@ function App() {
             <h2>
               Installed <span className="count">{state.addons.length}</span>
             </h2>
-            {state.addons.map((a: Addon) => (
+            {state.addons.filter((a:Addon)=>!hasAio(state.addons)||!isAnimeFallback(a)).map((a: Addon) => (
               <div className="addon panel" key={a.base}>
                 <div className="addonicon">
                   <Puzzle />

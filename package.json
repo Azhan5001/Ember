@@ -1,13 +1,13 @@
 {
   "name": "ember-desktop",
-  "version": "0.7.7",
+  "version": "0.7.9",
   "private": true,
   "description": "Ember addon-compatible media desktop",
   "author": "Ember",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc && vite build",
-    "test": "node --test tests/core.test.mjs tests/catalog-discovery.test.mjs tests/catalog-cache.test.mjs tests/default-migration.test.mjs tests/progress.test.mjs tests/sync.test.mjs tests/profiles-v04.test.mjs tests/history-recommendations.test.mjs tests/history-lock.test.mjs tests/web-delivery.test.mjs tests/party.test.mjs tests/release-070.test.mjs tests/privacy-076.test.mjs tests/privacy-sql-076.test.mjs tests/provider-link-076.test.mjs tests/features-077.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/catalog-discovery.test.mjs tests/catalog-cache.test.mjs tests/default-migration.test.mjs tests/progress.test.mjs tests/sync.test.mjs tests/profiles-v04.test.mjs tests/history-recommendations.test.mjs tests/history-lock.test.mjs tests/web-delivery.test.mjs tests/party.test.mjs tests/release-070.test.mjs tests/privacy-076.test.mjs tests/privacy-sql-076.test.mjs tests/provider-link-076.test.mjs tests/features-077.test.mjs tests/metadata-078.test.mjs tests/hybrid-079.test.mjs",
     "tauri": "tauri",
     "desktop": "tauri dev",
     "package:win": "tauri build --config src-tauri/tauri.windows.conf.json --bundles nsis",

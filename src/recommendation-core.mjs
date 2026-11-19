@@ -3,7 +3,7 @@ import {identityKey,mergeItems} from './catalog-core.mjs';
 
 const norm = x => String(x || '').normalize('NFKC').trim().toLowerCase();
 const list = x => (Array.isArray(x) ? x : typeof x === 'string' ? x.split(/[,/]/) : []).map(v=>norm(typeof v === 'object' ? v.name : v)).filter(Boolean);
-const aliases = {en:'english',eng:'english',ko:'korean',kor:'korean',ja:'japanese',jpn:'japanese',fr:'french',fra:'french',fre:'french',kr:'south korea','korea, republic of':'south korea',jp:'japan',us:'united states',usa:'united states',france:'france'};
+const aliases = {'science fiction':'sci-fi','science-fiction':'sci-fi',scifi:'sci-fi',en:'english',eng:'english',ko:'korean',kor:'korean',ja:'japanese',jpn:'japanese',fr:'french',fra:'french',fre:'french',kr:'south korea','korea, republic of':'south korea',jp:'japan',us:'united states',usa:'united states',france:'france'};
 const stop = new Set('about after again against also among an and are as at be been before being between but by can could day for from had has have her here him his how in into is it its life more must new not of on one or other out over own she some story than that the their them then there these they this through to two up was were what when where which while who will with world years young'.split(' '));
 export function features(item) {
   const f = new Map();
@@ -13,7 +13,10 @@ export function features(item) {
   };
   add('genre',[...(item.genres||[]),...(item.confirmedGenres||[])],3);
   add('category',item.categories,2.6);
-  add('language',item.original_language || item.language || item.languages,2);
+  add('language',item.original_language || item._originalLanguage || item.language || item.languages,2);
+  add('tag',[...list(item.keywords),...list(item.tags),...list(item.themes)],2.2);
+  add('studio',item.studios || item.studio || item._studioRefs,1.2);
+  add('network',item.networks || item.network,.8);
   add('country',item.country || item.countries || item.production_countries,1.6);
   add('director',item.director || item.directors,1.7);
   add('cast',list(item.cast).slice(0,5),.9);

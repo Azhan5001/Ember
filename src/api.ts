@@ -1,3 +1,7 @@
+import {titleRating} from './ratings-service';
+import {ratingId,applyRating} from './ratings-core.mjs';
+import {isAio,isFallback,hasAio,matchesFacets,catalogItems} from './metadata-provider.mjs';
+import {cachedMetadata} from './metadata-cache.mjs';
 import { enrichTV, discoverySupplement, episodeArtwork } from './metadata-enrichment';
 import { enrichMetadata, matchEpisode } from './metadata-core.mjs';
 import type { MediaInfo } from "./embedded-media";
@@ -104,42 +108,53 @@ const known = new Map<string, {item:Item; at:number}>();
 const metaCache = new CatalogCache({ limit: 128 });
 async function providerMeta(a: Addon, type: string, id: string, priority=false) {
   const url = resourceUrl(a.base, "meta", type, id);
-  return metaCache.get(url, () => limited(() => json(url).then(r => r.meta || null),priority));
+  return metaCache.get(url, () => limited(() => cachedMetadata(url,()=>json(url)).then(r => r.meta || null),priority));
 }
 export async function catalogs(
   addons: Addon[], type = "all", search = "",
-  options: { onUpdate?: (result: any) => void; force?: boolean; lazy?: boolean; genres?: string[]; sort?: string; active?: () => boolean } = {},
+  options: { onUpdate?: (result: any) => void; force?: boolean; lazy?: boolean; genres?: string[]; sort?: string; facets?:any; active?: () => boolean } = {},
 ) {
-  const jobs = catalogJobs(addons, type, search, options);
+  const jobs = catalogJobs(addons, type, search, options),catalogGeneration={};
   let supplemental: Item[] = [];
   let visibleLimit=60;
+  const ratings=new Map<string,any>(),ratingChecked=new Set<string>();let ratingBusy=false,ratingFailures=0,ratingTimer:ReturnType<typeof setTimeout>|undefined;
   const selected = options.genres || [], checked = new Set<string>();
   const rows: any[] = jobs.map((j: any) => {
     const url = resourceUrl(j.addon.base,"catalog",j.type,j.catalog.id,j.extra);
-    return { ...j, url, items: (cache.peek(url) || []).map((i: any, rank: number) => normalizeItem(i,{...j,rank})), loaded: !!cache.peek(url), loading:false, error:false, offset:cache.peek(url)?.length || 0, exhausted:false };
+    return { ...j, url, key:url+":"+(j.view||"default"), showEmpty:!!j.view, items: catalogItems((cache.peek(url) || []).map((i: any, rank: number) => normalizeItem(i,{...j,rank})),j), loaded: false, loading:false, error:false, offset:cache.peek(url)?.length || 0, exhausted:false };
   });
   const allItems = () => mergeItems([...supplemental,...rows.flatMap(r => search ? searchItems(r.items,search) : r.items).map((i: Item) => {
     const hit = known.get(i.type+":"+i.id);
     return hit && Date.now()-hit.at < 300000 ? mergeItems([i,hit.item])[0] : i;
-  })]).filter((i: Item) => type === "all" || i.type === type);
+  })]).filter((i: Item) => type === "all" || i.type === type).map((i:Item)=>applyRating(i,ratings.get(identityKey(i))));
   const needsMeta = (i: Item) => selected.length && !matchesGenres(i,selected);
   const uniqueRows=(all:Item[])=>{
     const seen:Item[]=[];
-    return rows.map(r=>({...r,items:(search?searchItems(r.items,search):r.items).flatMap((i:Item)=>{const canonical=all.find((candidate:Item)=>sameTitle(candidate,i));if(!canonical||seen.some(old=>sameTitle(old,canonical)))return [];seen.push(canonical);return [canonical];})}));
+    return rows.map(r=>({...r,items:(search?searchItems(r.items,search):r.items).flatMap((i:Item)=>{const canonical=all.find((candidate:Item)=>sameTitle(candidate,i));if(!canonical||(!r.view&&seen.some(old=>sameTitle(old,canonical))))return [];seen.push(canonical);return [canonical];})}));
   };
   const snapshot = () => {
-    const all=allItems(), matches=all.filter((i:Item)=>matchesGenres(i,selected));
+    const all=allItems(), matches=all.filter((i:Item)=>matchesGenres(i,selected)&&matchesFacets(i,options.facets));
     const ranked=sortItems(search?searchItems(matches,search):matches,options.sort);
     return {
-      items: options.lazy?ranked:ranked.slice(0,visibleLimit), rows:uniqueRows(all),
+      generation:catalogGeneration, items: options.lazy?ranked:ranked.slice(0,visibleLimit), rows:uniqueRows(all),
       errors: rows.filter(r => r.error).length,
       hasMore: ranked.length>visibleLimit || rows.some(r => r.pageable && !r.exhausted),
       hasCheckMore: all.some((i: Item) => needsMeta(i) && !checked.has(i.type+":"+i.id)),
       loadMore: async () => { visibleLimit+=60;if(ranked.length>=visibleLimit){publish();return;}await Promise.all(rows.filter(r => r.pageable && !r.exhausted).map(r => r.load(true))); if(ranked.length<32)await checkMore();publish(); },
       checkMore,
+      ratingPending:["rating","votes"].includes(options.sort||"")&&addons.some(a=>a.enabled&&a.manifest.id==="imdb.ratings.local")?matches.filter((i:Item)=>ratingId(i)&&!ratingChecked.has(identityKey(i))).length:0,ratingFailures,
+      loadRecommendations:async()=>{const seen=new Set();await Promise.all(rows.filter(r=>{const key=r.addon.base+":"+r.type+":"+(r.catalog.itemType||"");if(seen.has(key)||r.view==="weekly")return false;seen.add(key);return true}).map(r=>r.load()));},
     };
   };
   const publish = () => { if (options.active?.() !== false) options.onUpdate?.(snapshot()); };
+  async function refreshRatings(){
+    if(ratingBusy||!["rating","votes"].includes(options.sort||"")||!addons.some(a=>a.enabled&&a.manifest.id==='imdb.ratings.local'))return;
+    ratingBusy=true;
+    try{for(;;){const pending=allItems().filter((i:Item)=>matchesGenres(i,selected)&&matchesFacets(i,options.facets)&&ratingId(i)&&!ratingChecked.has(identityKey(i))).slice(0,4);if(!pending.length||options.active?.()===false)break;
+      await Promise.all(pending.map(async(i:Item)=>{try{const result=await titleRating(addons,i,json);if(result)ratings.set(identityKey(i),result);else ratingFailures++;}catch{ratingFailures++;}finally{ratingChecked.add(identityKey(i));}}));
+      if(!ratingTimer)ratingTimer=setTimeout(()=>{ratingTimer=undefined;publish()},150);
+    }}finally{ratingBusy=false;clearTimeout(ratingTimer);ratingTimer=undefined;publish();}
+  }
   async function checkMore() {
     const candidates = allItems().filter((i: Item) => needsMeta(i) && !checked.has(i.type+":"+i.id)).slice(0,12);
     await Promise.all(candidates.map(async (i: Item) => {
@@ -159,11 +174,11 @@ export async function catalogs(
     try {
       const raw = await cache.get(url, () => limited(async () => {
         if (options.active?.() === false) return [];
-        const data = await json(url);
+        const data = await cachedMetadata(url,()=>json(url),{force:!!options.force,onRefresh:(data:any)=>{if(!more&&Array.isArray(data?.metas)&&options.active?.()!==false){r.items=catalogItems(data.metas.map((i:any,rank:number)=>normalizeItem(i,{...r,rank})),r);publish();void refreshRatings();}}});
         if (!Array.isArray(data.metas)) throw Error("Invalid catalog");
         return data.metas.filter((i: any) => i.id && i.name);
       }), !!options.force);
-      const list = raw.map((i: any, rank: number) => normalizeItem(i,{...r,rank:rank+(more?r.offset:0)}));
+      const list = catalogItems(raw.map((i: any, rank: number) => normalizeItem(i,{...r,rank:rank+(more?r.offset:0)})),r);
       for (const i of list) {
         const k=i.type+":"+i.id, old=known.get(k);
         known.delete(k); known.set(k,{item:old && Date.now()-old.at<300000 ? mergeItems([i,old.item])[0] : i,at:Date.now()});
@@ -172,10 +187,17 @@ export async function catalogs(
       const before = r.items.length;
       r.items = more ? mergeItems([...r.items,...list]) : list;
       r.offset = more ? r.offset+raw.length : raw.length;
-      r.exhausted = !raw.length || (more && r.items.length === before);
+      r.exhausted = !raw.length || (!r.view && more && r.items.length === before);
       r.loaded = true; r.error = false;
-    } catch { r.error = true; r.loaded = true; }
-    finally { r.loading = false; publish(); }
+    } catch {
+      r.error = true; r.loaded = true;
+      if(isAio(r.addon)&&!more){
+        const backups=catalogJobs(addons.filter(a=>isFallback(a)),r.type.startsWith('anime')?'all':r.type,search,{genres:selected});
+        for(const backup of backups.slice(0,2)){try{const data=await json(resourceUrl(backup.addon.base,'catalog',backup.type,backup.catalog.id,backup.extra));if(data.metas?.length){r.items=data.metas.map((i:any,rank:number)=>normalizeItem(i,{...backup,rank}));r.name=backup.name;r.error=false;r.pageable=false;break;}}catch{}}
+      }
+    }
+    finally { r.loading = false; publish(); void refreshRatings(); }
+    if(r.view&&!more&&r.pageable&&r.items.length<8&&!r.error){for(let page=0;page<3&&!r.exhausted&&r.items.length<8&&options.active?.()!==false;page++)await r.load(true);}
   };
   publish();
   await Promise.all([
@@ -192,15 +214,13 @@ export async function catalogs(
   return snapshot();
 }
 export async function metadata(addons: Addon[], item: Item, episodes=true) {
-  const ordered = [...addons].filter(a=>a.enabled).sort((a,b) => Number(b.base === item.provider)-Number(a.base === item.provider));
-  const jobs=ordered.map(a=>({a,t:resourceTypeFor(a.manifest,"meta",item.type,item.id,item.resourceType,supports)})).filter(j=>j.t).slice(0,4);
-  const results=await Promise.allSettled(jobs.map(async({a,t})=>{
-    const m=await providerMeta(a,t!,item.id,episodes);
-    return m?.id===item.id?normalizeItem({...m,resourceType:t,provider:a.base},{catalog:{type:t}}):null;
-  }));
+  const ordered = [...addons].filter(a=>a.enabled).sort((a,b) => Number(isAio(b))-Number(isAio(a)) || Number(b.base === item.provider)-Number(a.base === item.provider));
+  const jobs=ordered.map(a=>({a,t:resourceTypeFor(a.manifest,"meta",item.type,item.id,item.resourceType,supports)})).filter(j=>j.t);
   let combined:any=item;
-  for(const r of results)if(r.status==='fulfilled'&&r.value)combined=enrichMetadata(combined,r.value);
-  combined=normalizeItem(await enrichTV(combined,episodes));
+  const primary=jobs.find(j=>isAio(j.a));let supplied=false;
+  if(primary){try{const m=await providerMeta(primary.a,primary.t!,item.id,episodes);if(m?.id===item.id){combined=enrichMetadata(normalizeItem({...m,resourceType:primary.t,provider:primary.a.base},{catalog:{type:primary.t}}),item);supplied=true;}}catch{}}
+  if(!supplied){const results=await Promise.allSettled(jobs.filter(j=>!isAio(j.a)).slice(0,4).map(async({a,t})=>{const m=await providerMeta(a,t!,item.id,episodes);return m?.id===item.id?normalizeItem({...m,resourceType:t,provider:a.base},{catalog:{type:t}}):null;}));for(const r of results)if(r.status==='fulfilled'&&r.value)combined=enrichMetadata(combined,r.value);}
+  combined=normalizeItem(supplied?combined:await enrichTV(combined,episodes));
   known.set(item.type+":"+item.id,{item:combined,at:Date.now()});
   return combined as Item;
 }

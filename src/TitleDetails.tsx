@@ -1,14 +1,14 @@
 import { useEpisodeAvailability } from './use-episode-availability';
 import { json } from './api';
-import { CatalogCache } from './catalog-cache.mjs';
+import {titleRating} from './ratings-service';
 import React,{useState,useEffect,useRef} from 'react';
 import {Play,Plus,Check,X,CheckCircle2,Star,ExternalLink,SlidersHorizontal} from 'lucide-react';
 import Artwork from './Artwork';
 import {watchIndicator} from './progress-state.mjs';
 import {plainText,trailerId} from './metadata-core.mjs';
-import {ratingSummary} from './ratings-core.mjs';
+import {ratingId} from './ratings-core.mjs';
 const dateLabel=(raw:any)=>{const d=new Date(raw);return raw&&Number.isFinite(d.valueOf())?d.toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'}):'Release date unavailable'};
-const ratingCache = new CatalogCache({ttl:86400000,limit:100});
+
 export default function TitleDetails({addons,item,season,setSeason,progress,inLibrary,onLibrary,onPlay,onClose,openWebsite}:any){
  const dialog=useRef<HTMLElement>(null),closeRef=useRef(onClose);closeRef.current=onClose;
  useEffect(()=>{
@@ -43,13 +43,11 @@ export default function TitleDetails({addons,item,season,setSeason,progress,inLi
  const [extra,setExtra]=useState<{score:number;votes:number;reviewUrl:string}|null>(null);
  useEffect(()=>{
    const addon=addons.find((a:any)=>a.enabled&&a.manifest.id==='imdb.ratings.local');
-   setExtra(null);if(!addon||!imdb)return;
+   setExtra(null);if(!addon||!ratingId(item))return;
    let active=true;
-   void ratingCache.get(addon.base+':'+imdb,async()=>{
-     return ratingSummary(await json(addon.base+'/stream/'+item.type+'/'+imdb+'.json'));
-   }).then(result=>{if(active)setExtra(result)}).catch(()=>{});
+   void titleRating(addons,item,json).then(result=>{if(active)setExtra(result)}).catch(()=>{});
    return ()=>{active=false};
- },[imdb,addons]);
+ },[item.id,addons]);
  const fallback=extra;
  const rating=fallback?.score||providerRating,votes=fallback?.votes||providerVotes;
  const resume=Object.values(progress).filter((p:any)=>p.item?.id===item.id&&!p.hidden&&!p.watched&&p.position>0).sort((a:any,b:any)=>b.updatedAt-a.updatedAt)[0] as any;
