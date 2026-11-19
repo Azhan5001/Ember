@@ -7,10 +7,6 @@ on:
         type: choice
         default: all
         options: [all, web, windows, linux, android]
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/build-installers.yml'
 permissions:
   contents: read
 concurrency:
@@ -18,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   web:
-    if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'web' }}
+    if: ${{ inputs.platform == 'all' || inputs.platform == 'web' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +31,7 @@ jobs:
           path: artifacts/Ember-Web-*-Cloudflare-Pages.zip
           if-no-files-found: error
   windows:
-    if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'windows' }}
+    if: ${{ inputs.platform == 'all' || inputs.platform == 'windows' }}
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -43,10 +39,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: ilammy/setup-nasm@v1
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          cache-on-failure: true
       - run: npm ci
       - run: npm run package:win -- --ci
       - uses: actions/upload-artifact@v4
@@ -55,7 +53,7 @@ jobs:
           path: src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
   linux:
-    if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'linux' }}
+    if: ${{ inputs.platform == 'all' || inputs.platform == 'linux' }}
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -80,7 +78,7 @@ jobs:
           path: src-tauri/target/release/bundle/rpm/*.rpm
           if-no-files-found: error
   android:
-    if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'android' }}
+    if: ${{ inputs.platform == 'all' || inputs.platform == 'android' }}
     runs-on: ubuntu-24.04
     env:
       NDK_VERSION: 27.2.12479018
