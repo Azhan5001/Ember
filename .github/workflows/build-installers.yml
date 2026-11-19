@@ -46,7 +46,9 @@ jobs:
           workspaces: src-tauri
           cache-on-failure: true
       - run: npm ci
+      - run: npm test
       - run: npm run package:win -- --ci
+      - run: cargo test --release --manifest-path src-tauri/Cargo.toml --lib storage::
       - uses: actions/upload-artifact@v4
         with:
           name: ember-windows

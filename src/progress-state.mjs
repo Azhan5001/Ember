@@ -13,12 +13,19 @@ export function updateWatch(old, event) {
           ),
   };
 }
+import {profileScope} from './profile-core.mjs';
 export function mergeProgressState(stored, incoming) {
-  const progress = { ...stored?.progress, ...incoming?.progress };
+  if(profileScope(stored)!==profileScope(incoming))return incoming;
+  const scoped=!!incoming?._people;
+  const progress = scoped?{...incoming?.progress}:{ ...stored?.progress, ...incoming?.progress };
   for (const [id, old] of Object.entries(stored?.progress || {})) {
+    const deletedAt=incoming?._progressDeleted?.[id]||0;
+    if(deletedAt>0&&deletedAt>=(old.updatedAt||0)&&deletedAt>=(incoming?.progress?.[id]?.updatedAt||0)){delete progress[id];continue;}
     const ownerChanged=incoming?._sync?.owner && incoming._sync.owner!==stored?._sync?.owner;
-    const newRevision=incoming?._sync?.revisions?.['progress:'+id] || 0;
-    const oldRevision=stored?._sync?.revisions?.['progress:'+id] || 0;
+    if(scoped && !incoming?.progress?.[id])continue;
+    const key=scoped&&incoming._people.owner?'space:'+incoming._people.activeId+':progress:'+id:'progress:'+id;
+    const newRevision=incoming?._sync?.revisions?.[key] || 0;
+    const oldRevision=stored?._sync?.revisions?.[key] || 0;
     if(ownerChanged || newRevision>oldRevision){if(!incoming?.progress?.[id])delete progress[id];continue;}
     if(!incoming?.progress?.[id] && newRevision>0){delete progress[id];continue;}
     if(old.updatedAt > (incoming?.progress?.[id]?.updatedAt || 0))progress[id]=old;

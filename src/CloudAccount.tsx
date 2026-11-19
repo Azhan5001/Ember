@@ -28,16 +28,20 @@ export default function CloudAccount({logoutRef,state,setState,onAccount,onNotic
      if(next._people.owner && next._people.owner!==owner)next=enterGuest(next);
      next=ensureAccount(next,owner,empty());
      const account=next._people.accounts[owner];
+     const selectedProfile=next._people.owner===owner?next._people.activeId:'main';
      const remoteV2=all.some(r=>r.id.startsWith('account:profile:'));
      if(remoteV2){
-      next={...next,_people:{...next._people,accounts:{...next._people.accounts,[owner]:{...account,profiles:[],spaces:{},sharedAddons:[],addonDefaultsVersion:0}}}};
-      for(const r of all) if(r.id.startsWith('account:') || r.id.startsWith('space:'))next=applyRecord({...next,_people:{...next._people,owner,activeId:'guest'}},r);
-      next=ensurePeople(next,empty());
-      const first=next._people.accounts[owner].profiles[0]?.id;
+      next=saveCurrent(next);
+      next={...next,_people:{...next._people,owner,activeId:'__hydrating__',accounts:{...next._people.accounts,[owner]:{...account,profiles:[],spaces:{},sharedAddons:[],addonDefaultsVersion:0}}}};
+      for(const r of all)if(r.id.startsWith('account:'))next=applyRecord(next,r);
+      for(const r of all)if(r.id.startsWith('space:'))next=applyRecord(next,r);
+      const profiles=next._people.accounts[owner].profiles;
+      const first=profiles.some((p:any)=>p.id===selectedProfile)?selectedProfile:profiles[0]?.id;
       if(first)next=enterProfile(next,owner,first,empty());
+      next=ensurePeople(next,empty());
      } else {
       next=enterProfile(next,owner,account.profiles[0].id,empty());
-      for(const r of all)next=applyRecord(next,r);
+      for(const r of all)next=applyRecord(next,r,true);
       next=saveCurrent(next);
      }
      next={...next,_sync:newMeta(owner)};

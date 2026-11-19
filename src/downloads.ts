@@ -59,7 +59,8 @@ export async function startDownload(source:any,name:string){
   }catch(e){job.state=controller.signal.aborted?'cancelled':'failed';job.error=String(e).replace(/^Error: /,'');
     if(!controller.signal.aborted && e instanceof TypeError && /^https?:\/\//i.test(source.url) && !Object.keys(source.behaviorHints?.proxyHeaders?.request||{}).length){
       job.directUrl=source.url;
-      job.error="Your browser could not fetch this file. Open the provider link and use your browser’s save option.";
+      job.state='link';
+      job.error="Click the link below to download this video in your browser.";
     }}
   finally{clearTimeout(startTimer);frame?.remove();channel?.port1.close();void reader?.cancel().catch(()=>{});controllers.delete(id)}
  })();return id;

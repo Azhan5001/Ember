@@ -73,7 +73,7 @@ import {
 import { load, save } from "./store";
 import CloudAccount from "./CloudAccount";
 import ProfileChooser from "./ProfileChooser";
-import {editProfile,snapshot} from "./profile-core.mjs";
+import {editProfile,snapshot,profileScope} from "./profile-core.mjs";
 import {savePlaybackTorBoxKey, playbackTorBoxKey} from "./web-playback";
 import "./style.css";
 function openWebsite(raw: string) {
@@ -188,6 +188,7 @@ function App() {
   useEffect(() => {
     load().then(setState).catch(() => setNotice("Your saved profile could not be opened. It has not been replaced. Close Ember and check the migration report."));
   }, []);
+  useEffect(()=>{playId.current++;prepared.current=null;setSession(null);},[state?._people?.owner,state?._people?.activeId]);
   useEffect(() => {
     if (!state || !window.ember) return;
     const receive = (u: string) => {
@@ -344,6 +345,7 @@ function App() {
   }
   async function play(item: Item, video?: any, showSources=!!video?.showSources) {
     const id = ++playId.current;
+    const scope=profileScope(stateRef.current);
     const metadataRefresh=item.type==='series'?metadata(state.addons,item):Promise.resolve(item);
     if(item.type === "series" && !item.videos?.length) { item=await metadataRefresh; if(id!==playId.current)return; }
     video=item.videos?.find((v:any)=>v.id===video?.id)||video;
@@ -354,7 +356,7 @@ function App() {
       item.id === "ember:direct"
         ? [normalize({ name: "Direct stream", url: direct }, "Direct")]
         : await prepare(item, vid);
-    if (id !== playId.current) return;
+    if (id !== playId.current || scope!==profileScope(stateRef.current)) return;
     if(video && !sources.length){setNotice("No sources available for this episode.");return;}
     if(video){
       setState((old:any)=>{
@@ -368,6 +370,7 @@ function App() {
     setDetail(null);
     prepared.current = null;
     setSession({
+      profileScope:scope,
       showSources,
       item,
       video,
@@ -421,6 +424,7 @@ function App() {
       updatedAt: Date.now(),
     };
     const prev=stateRef.current;
+    if(s.profileScope!==profileScope(prev))return;
     const next={...prev,history:recordHistory(prev.history,{...value,ranges}),progress:{...prev.progress,[id]:updateProgress(prev.progress[id],value)}};
     stateRef.current=next;
     setState(next);
@@ -725,7 +729,7 @@ function App() {
               )}
               <footer>
                 <Flame size={16} /> MADE FOR THE WAY YOU WATCH{" "}
-                <span>EMBER / 0.7.5</span>
+                <span>EMBER / 0.7.6</span>
               </footer>
             </>
           )}

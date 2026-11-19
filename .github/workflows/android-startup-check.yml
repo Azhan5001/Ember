@@ -46,7 +46,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 36
           arch: x86_64
           target: google_apis
           disable-animations: true
@@ -57,8 +57,13 @@ jobs:
             sleep 12
             adb logcat -d > android-startup.log
             adb shell pidof app.ember.desktop
+            adb shell am force-stop app.ember.desktop
+            adb shell am start -W -n app.ember.desktop/.MainActivity
+            sleep 8
+            adb shell pidof app.ember.desktop
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: android-startup-log
           path: android-startup.log
+

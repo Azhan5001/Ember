@@ -49,7 +49,7 @@ function applyPart(part,r) {
  if(kind==='progress'){const progress={...part.progress};if(r.deleted)delete progress[id];else if(v?.item?.id)progress[id]=v;return {...part,progress};}
  return part;
 }
-export function applyRecord(s,r) {
+export function applyRecord(s,r,importLegacy=false) {
  const owner=s._people?.owner,account=owner && s._people.accounts[owner];
  if(r.id.startsWith('account:') && account) {
   let next=account;
@@ -74,7 +74,9 @@ export function applyRecord(s,r) {
   const people={...s._people,accounts:{...s._people.accounts,[owner]:next}};
   return people.activeId===id ? {...s,...updated,_people:people,addons:account.profiles.find(p=>p.id===id)?.isolatedAddons?updated.addons:next.sharedAddons} : {...s,_people:people};
  }
- // Legacy v1 records are imported once for the main profile.
+ // Unscoped records belong to the explicit one-time legacy import, never to
+ // whichever subprofile happens to be open when a sync page arrives.
+ if(s._people && !importLegacy)return s;
  return applyPart(s,r);
 }
 export function receive(s,result,sent=[]) {

@@ -44,6 +44,6 @@ export function eraseHistory(state, keepContinue = false, key = null) {
   if (key) delete history[key];
   else for (const id of Object.keys(history)) delete history[id];
   const progress = keepContinue ? state.progress : Object.fromEntries(Object.entries(state.progress || {})
-    .map(([id,p])=>[id,!key || titleKey(p.item)===key ? {...p,hidden:true,updatedAt:Date.now()} : p]));
-  return {...state,history,progress};
+    .filter(([,p])=>key && titleKey(p.item)!==key));
+  return {...state,history,progress,...(!keepContinue?{_progressDeleted:{...state._progressDeleted,...Object.fromEntries(Object.entries(state.progress||{}).filter(([,p])=>!key||titleKey(p.item)===key).map(([id])=>[id,Date.now()]))}}:{})};
 }

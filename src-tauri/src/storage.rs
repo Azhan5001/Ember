@@ -30,6 +30,11 @@ fn private_profile_key(root: &Path) -> Result<[u8; 32]> {
    let mut file = OpenOptions::new().write(true).create_new(true).mode(0o600).open(&staging)?;
    file.write_all(&key)?;
    file.sync_all()?;
+   // Android SELinux forbids hard links in app data. Store::open holds a
+   // database write lock while checking and atomically publishing this key.
+   #[cfg(target_os="android")]
+   fs::rename(&staging, &path)?;
+   #[cfg(not(target_os="android"))]
    match fs::hard_link(&staging, &path) {
     Ok(()) => (),
     Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => (),
@@ -61,7 +66,13 @@ impl Store {
   let db=Connection::open(root.join("ember.sqlite"))?;
   db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA cache_size=-512; PRAGMA journal_size_limit=1048576; CREATE TABLE IF NOT EXISTS state(id INTEGER PRIMARY KEY,data BLOB NOT NULL,encrypted INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS secrets(key TEXT PRIMARY KEY,data BLOB NOT NULL);")?;
   #[cfg(any(target_os="linux", target_os="android"))]
-  let key=private_profile_key(&root)?;
+  let key={
+   db.busy_timeout(std::time::Duration::from_secs(10))?;
+   db.execute_batch("BEGIN IMMEDIATE")?;
+   let result=private_profile_key(&root);
+   db.execute_batch(if result.is_ok(){"COMMIT"}else{"ROLLBACK"})?;
+   result?
+  };
   let store=Self{db:Mutex::new(db),root,#[cfg(any(target_os="linux", target_os="android"))] key};
   if store.read()?.is_null(){if let Some(old)=legacy{if old.join("ember.sqlite").exists(){store.migrate(&old)?;}}}
   Ok(store)
@@ -111,8 +122,10 @@ impl Store {
  pub fn checkpoint(&self,p:Value)->Result<()> {
   if p["item"]["type"].as_str().is_none() || p["vid"].as_str().is_none() || p["position"].as_f64().is_none() || p["duration"].as_f64().is_none(){bail!("Invalid checkpoint")}
   let db=self.db.lock().unwrap();let mut data=self.read_db(&db)?;if data.is_null(){data=json!({})}
+  if data["_people"].is_object() && p["profileScope"].as_str()!=Some(profile_scope(&data).as_str()){return Ok(())}
   if !data["progress"].is_object(){data["progress"]=json!({})}
   let id=format!("{}:{}",p["item"]["type"].as_str().unwrap(),p["vid"].as_str().unwrap());
+  if data["_progressDeleted"][&id].as_u64().unwrap_or(0)>=p["updatedAt"].as_u64().unwrap_or(1){return Ok(())}
   let old=data["progress"][&id].clone();data["progress"][&id]=update_watch(old,p);self.put(&db,&data)
  }
  pub fn secret(&self,key:&str,value:Option<Option<String>>)->Result<Option<String>>{
@@ -139,10 +152,16 @@ pub fn update_watch(old:Value,p:Value)->Value {
  let mut out=old.as_object().cloned().unwrap_or_default();if let Some(p)=p.as_object(){out.extend(p.clone())}out.insert("watched".into(),json!(watched));Value::Object(out)
 }
 pub fn merge_progress(old:&Value,new:&mut Value){
+ if profile_scope(old)!=profile_scope(new){return}
+ let scoped=new["_people"].is_object();
  let mut progress=old["progress"].as_object().cloned().unwrap_or_default();
+ if scoped {progress=new["progress"].as_object().cloned().unwrap_or_default();}
  if let Some(p)=new["progress"].as_object(){progress.extend(p.clone());}
  if let Some(p)=old["progress"].as_object(){for(id,v) in p{
-  let k=format!("progress:{id}");let nr=new["_sync"]["revisions"][&k].as_u64().unwrap_or(0);let or=old["_sync"]["revisions"][&k].as_u64().unwrap_or(0);
+  let deleted_at=new["_progressDeleted"][id].as_u64().unwrap_or(0);
+  if deleted_at>0 && deleted_at>=v["updatedAt"].as_u64().unwrap_or(0) && deleted_at>=new["progress"][id]["updatedAt"].as_u64().unwrap_or(0){progress.remove(id);continue}
+  if scoped && new["progress"][id].is_null(){continue}
+  let k=if scoped && new["_people"]["owner"].is_string(){format!("space:{}:progress:{id}",new["_people"]["activeId"].as_str().unwrap_or("guest"))}else{format!("progress:{id}")};let nr=new["_sync"]["revisions"][&k].as_u64().unwrap_or(0);let or=old["_sync"]["revisions"][&k].as_u64().unwrap_or(0);
   let changed=new["_sync"]["owner"].as_str().is_some()&&new["_sync"]["owner"]!=old["_sync"]["owner"];
   if changed||nr>or {if new["progress"][id].is_null(){progress.remove(id);}continue}
   if new["progress"][id].is_null()&&nr>0{progress.remove(id);continue}
@@ -150,11 +169,29 @@ pub fn merge_progress(old:&Value,new:&mut Value){
  }}
  new["progress"]=Value::Object(progress);
 }
+fn profile_scope(state:&Value)->String {
+ let people=&state["_people"];
+ let owner=if people.is_object(){&people["owner"]}else{&state["_sync"]["owner"]};
+ json!([owner,people["activeId"].as_str().unwrap_or("legacy")]).to_string()
+}
 #[cfg(test)]mod tests{use super::*;#[test]fn rewatch(){let old=json!({"watched":true,"updatedAt":1});assert_eq!(update_watch(old,json!({"watched":false,"updatedAt":2}))["watched"],false)}#[test]fn tombstone(){let old=json!({"progress":{"series:a":{"updatedAt":10}},"_sync":{"owner":"a","revisions":{"progress:series:a":1}}});let mut new=json!({"progress":{},"_sync":{"owner":"a","revisions":{"progress:series:a":2}}});merge_progress(&old,&mut new);assert_eq!(new["progress"],json!({}))}}
 #[cfg(all(test,windows))]
 mod migration_tests {
  use super::*;
  fn root()->PathBuf{std::env::temp_dir().join(format!("ember-rust-test-{}",uuid::Uuid::new_v4()))}
+ #[test]fn profile_switch_and_deleted_progress_stay_isolated(){
+  let root=root();let s=Store::open(root.clone(),None).unwrap();
+  let first=json!({"_people":{"owner":"account","activeId":"main"},"progress":{"series:episode":{"updatedAt":20}}});
+  s.write(first.clone()).unwrap();
+  let second=json!({"_people":{"owner":"account","activeId":"sibling"},"progress":{}});
+  s.write(second.clone()).unwrap();assert_eq!(s.read().unwrap()["progress"],json!({}));
+  s.checkpoint(json!({"profileScope":profile_scope(&first),"item":{"type":"series"},"vid":"episode","position":65,"duration":100,"updatedAt":30})).unwrap();
+  assert_eq!(s.read().unwrap()["progress"],json!({}));
+  s.write(first.clone()).unwrap();let mut erased=first.clone();erased["progress"]=json!({});erased["_progressDeleted"]=json!({"series:episode":40});s.write(erased).unwrap();
+  s.checkpoint(json!({"profileScope":profile_scope(&first),"item":{"type":"series"},"vid":"episode","position":65,"duration":100,"updatedAt":30})).unwrap();
+  assert_eq!(s.read().unwrap()["progress"],json!({}));
+  drop(s);std::fs::remove_dir_all(root).unwrap();
+ }
  #[test]fn dpapi_and_legacy_profile(){
   let old=root();std::fs::create_dir_all(&old).unwrap();let c=Connection::open(old.join("ember.sqlite")).unwrap();c.execute_batch("CREATE TABLE state(id INTEGER PRIMARY KEY,data BLOB,encrypted INTEGER)").unwrap();
   let data=json!({"profile":"Migration fixture","addons":[{"base":"https://example.test/private-token","enabled":false}],"progress":{}});

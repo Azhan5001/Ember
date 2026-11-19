@@ -13,7 +13,7 @@ import {useAnimatedPanel} from "./use-animated-panel";
 import {playbackRange,mergeRanges} from "./history-core.mjs";
 import {findAudioTrack,labeledAudioSource,audioLanguage} from "./audio-track-core.mjs";
 import {embeddedFormat, embeddedStream, mediaInput, type MediaInfo, type MediaTrack} from "./embedded-media";
-import {prefersNative, missingVideoFrames, hintedAudio, needsAudioConversion} from "./video-frame-core.mjs";
+import {prefersNative, missingVideoFrames, missingAudioFrames, needsContainerRemux, hintedAudio, needsAudioConversion} from "./video-frame-core.mjs";
 import { watchIndicator } from "./progress-state.mjs";
 import PlaybackSettings from "./PlaybackSettings";
 import { automaticSegment, normalizeSegments } from "./skip-core.mjs";
@@ -85,6 +85,14 @@ export default function Player({
     [selected, setSelected] = useState<any>(null),
     sourceRef = useRef<any>(null);
   const [sourceLoaded,setSourceLoaded]=useState(false);
+  const [contextMenu,setContextMenu]=useState<{x:number;y:number}|null>(null);
+  useEffect(()=>{
+    if(!contextMenu)return;
+    const close=(event:PointerEvent)=>{if(!(event.target as Element)?.closest('.player-context-menu'))setContextMenu(null)};
+    const key=(event:KeyboardEvent)=>{if(event.key==='Escape')setContextMenu(null)};
+    document.addEventListener('pointerdown',close);document.addEventListener('keydown',key);
+    return()=>{document.removeEventListener('pointerdown',close);document.removeEventListener('keydown',key)};
+  },[contextMenu]);
   const stalledAt=useRef(0),lastPartyCheck=useRef(0),lastPartyRoom=useRef<any>(null),lastPartySeek=useRef(0),pendingPartySync=useRef(false);
   const tapTimer=useRef<any>(null),lastTap=useRef({at:0,side:false}),lastTouch=useRef(0);
   function surfaceTap(x:number){
@@ -323,6 +331,7 @@ export default function Player({
         coverage.current,
       );
       window.ember?.checkpoint({
+        profileScope:s.profileScope,
         item: s.item,
         video: s.video,
         vid: s.vid,
@@ -614,7 +623,7 @@ export default function Player({
       if (id !== generation.current) return;
       const canPlayAudio=(mime:string)=>videos.current[targetSlot]?.canPlayType(mime);
       const riskyAudio=needsAudioConversion(hintedAudio(input)||hintedAudio(source),canPlayAudio);
-      if (browser && (forceCompatibility||riskyAudio) && !hlsSource(source)) source = {...source,browserRemux:true};
+      if (browser && (forceCompatibility||riskyAudio||needsContainerRemux(source)) && !hlsSource(source)) source = {...source,browserRemux:true};
       const isHls = hlsSource(source);
       const browserType = source.contentType;
       const useRelay = !!source.providerRelay;
@@ -641,8 +650,10 @@ export default function Player({
         v = await loadVideo(source, targetSlot, id, target(), info, converted, change || {});
       } catch (directError) {
         if (browser) {
-          if (source.browserRemux || isHls) throw directError;
-          source = {...source,browserRemux:true};
+          if (isHls || (source.browserRemux && (forceCompatibility || riskyAudio))) throw directError;
+          // Some providers permit native media playback but forbid browser fetch.
+          // A container hint alone must not prevent otherwise playable AAC video.
+          source = {...source,browserRemux:!source.browserRemux};
           if (!had) setStatus("Opening video…");
           v = await loadVideo(source, targetSlot, id, target(), info, false, change || {});
         } else {
@@ -1242,7 +1253,7 @@ export default function Player({
     <div
       className={"player " + (!controlsVisible ? "controls-hidden" : "")}
       ref={container}
-      onContextMenu={event=>{event.preventDefault();setDrawer("more")}}
+      onContextMenu={event=>{event.preventDefault();setContextMenu({x:Math.max(8,Math.min(event.clientX,innerWidth-180)),y:Math.max(8,Math.min(event.clientY,innerHeight-58))})}}
       onPointerMove={e=>{if(e.pointerType==='mouse'){keyboardFocus.current=false;wake();}}}
       onPointerDown={()=>{keyboardFocus.current=false;activity.current=Date.now();}}
       onPointerUp={e=>finishSurface(e)}
@@ -1258,6 +1269,7 @@ export default function Player({
           keyboardFocus.current = false;
       }}
     >
+      {contextMenu&&<div className="player-context-menu" role="menu" style={{position:'fixed',left:contextMenu.x,top:contextMenu.y,zIndex:10000,padding:6,borderRadius:10,background:'#15171d',border:'1px solid #ffffff26',boxShadow:'0 8px 24px #0008'}}><button className="glass" role="menuitem" disabled={!selected} onClick={()=>{setContextMenu(null);void downloadSelected()}}><Download size={16}/> Download video</button></div>}
       {[0, 1].map((i) => (
         <video
           key={i}
@@ -1281,12 +1293,12 @@ export default function Player({
             lastSample.current=sample;
             if (!seekTimer.current && !dragging.current) setPosition(time.current.position);
             setDuration(time.current.duration);
-            if(window.ember && sourceRef.current && !opening.current && !compatibility.current[i]){
+            if(sourceRef.current && !opening.current && !compatibility.current[i] && !hls.current[i]){
               const watch=frameWatch.current;
               if(watch.key!==sourceRef.current.key)frameWatch.current={key:sourceRef.current.key,position:v.currentTime};
-              else if(missingVideoFrames(v,v.currentTime-watch.position)){
+              else if(missingVideoFrames(v,v.currentTime-watch.position)||missingAudioFrames(v,v.currentTime-watch.position)){
                 frameWatch.current={key:sourceRef.current.key,position:Infinity};
-                fallback();
+                if(browser)void chooseRef.current(sourceRef.current,true,false,{});else fallback();
               }
             }
             if(!v.paused && time.current.position>previousPosition)health(true);

@@ -18,6 +18,15 @@ export function hintedAudio(source) {
  if (/\btrue[ ._-]?hd\b/i.test(label)) return 'truehd';
  if (/\bdts\b/i.test(label)) return 'dts';
  if (/\b(?:e[ ._-]?ac[ ._-]?3|ddp|dd\+)/i.test(label)) return 'eac3';
- if (/\bac[ ._-]?3\b/i.test(label)) return 'ac3';
+ if (/\b(?:ac[ ._-]?3|dd(?=\d|[ ._-]*[257]\.1|\b))/i.test(label)) return 'ac3';
  return '';
+}
+// Matroska may render video while silently discarding unsupported sound.
+// A successful loadeddata/play event is not proof that all tracks are playable.
+export function needsContainerRemux(source={}) {
+ return [source.behaviorHints?.filename,source.url?.split(/[?#]/)[0]].some(value=>/\.(mkv|avi|ts|m2ts)(?:$|\/)/i.test(value||''));
+}
+export function missingAudioFrames(video,elapsed,expectsAudio=true) {
+ return expectsAudio && elapsed>=3 && !video.paused && video.readyState>=2 &&
+  typeof video.webkitAudioDecodedByteCount==='number' && video.webkitAudioDecodedByteCount===0 && video.videoWidth>0;
 }

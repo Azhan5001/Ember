@@ -35,9 +35,10 @@ const addDefaults=(addons,defaults)=>{
   for(const item of defaults)if(!list.some(a=>a.manifest?.id===item.manifest?.id))list.push(clone(item));
   return list;
 };
-export const fields = ['profile','settings','addons','library','progress','history'];
+export const fields = ['profile','settings','addons','library','progress','history','_progressDeleted'];
+export const profileScope = state => JSON.stringify([state?._people ? state._people.owner ?? null : state?._sync?.owner ?? null, state?._people?.activeId ?? 'legacy']);
 export function snapshot(state) {
-  return Object.fromEntries(fields.map(k => [k, state[k] ?? (k === 'progress' || k === 'history' || k === 'settings' ? {} : k === 'profile' ? 'You' : [])]));
+  return Object.fromEntries(fields.map(k => [k, state[k] ?? (k === 'progress' || k === 'history' || k === 'settings' || k === '_progressDeleted' ? {} : k === 'profile' ? 'You' : [])]));
 }
 const content = (state, part) => ({...state,...snapshot(part || {})});
 export function ensurePeople(state, empty) {
