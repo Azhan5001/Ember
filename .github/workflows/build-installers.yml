@@ -48,7 +48,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run package:win -- --ci
-      - run: cargo test --release --manifest-path src-tauri/Cargo.toml --lib storage::
+      - run: 'cargo test --release --manifest-path src-tauri/Cargo.toml --lib storage::'
       - uses: actions/upload-artifact@v4
         with:
           name: ember-windows
@@ -118,3 +118,4 @@ jobs:
           name: ember-android-unsigned
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
+
