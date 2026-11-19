@@ -9,7 +9,7 @@ The Android workflow artifact is **unsigned**. Sign it locally with the retained
 Use Android SDK Build Tools to align the APK before signing:
 ```text
 zipalign -P 16 -f 4 unsigned.apk aligned.apk
-apksigner sign --ks /private/ember-release.jks --ks-key-alias ember --ks-pass file:/private/password.txt --key-pass file:/private/password.txt --out Ember-0.7.5-android-arm64.apk aligned.apk
+apksigner sign --ks /private/ember-release.jks --ks-key-alias ember --ks-pass file:/private/password.txt --out Ember-0.7.5-android-arm64.apk aligned.apk
 apksigner verify --verbose --print-certs Ember-0.7.5-android-arm64.apk
 ```
 
