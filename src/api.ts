@@ -230,10 +230,10 @@ const streamCache = new CatalogCache({ttl: 120000, limit: 100});
 export async function lookupStreams(addons: Addon[], type: string, id: string): Promise<{sources:any[],complete:boolean}> {
   const key = JSON.stringify([type,id,addons.filter(a=>a.enabled).map(a=>[a.base,a.manifest.resources])]);
   return streamCache.get(key, async () => {
-  const sources: Addon[] = (!window.ember || window.ember.platform === "linux") ? preferConfiguredTorrentio(addons) : addons;
+    const sources: Addon[] = preferConfiguredTorrentio(addons);
   const result = await Promise.allSettled(
     sources
-      .filter((a) => a.enabled && resourceTypeFor(a.manifest, "stream", type, id, undefined, supports))
+        .filter((a) => a.enabled && a.manifest.id !== 'imdb.ratings.local' && resourceTypeFor(a.manifest, "stream", type, id, undefined, supports))
       .map(async (a) => {
         const r = await json(resourceUrl(a.base, "stream", resourceTypeFor(a.manifest, "stream", type, id, undefined, supports)!, id));
         return (r.streams || []).map((s: any) => normalize(s, a.manifest.name));

@@ -1,0 +1,6 @@
+<!doctype html><html><body><div id="root"></div><script type="module">
+import React,{useState}from'react';import{createRoot}from'react-dom/client';import{useAppNavigation}from'/src/use-app-navigation.ts';
+window.ember={platform:'android'};
+function App(){const[view,setView]=useState({page:'Home',detail:null,session:null,modal:''});useAppNavigation(view,setView,'fixture-account');return React.createElement('main',null,React.createElement('h1',null,view.page),React.createElement('button',{onClick:()=>setView({...view,page:'Discover'})},'Discover'),React.createElement('button',{onClick:()=>setView({...view,page:'Settings'})},'Settings'))}
+createRoot(document.querySelector('#root')).render(React.createElement(App));
+</script></body></html>

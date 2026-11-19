@@ -77,7 +77,7 @@ impl Media {
         let mut command = process(&self.ffprobe);
         let (analysis, size, timeout) = if cfg!(target_os="linux") {
             ("1100000", "1800000", 8)
-        } else { ("3000000", "4000000", 18) };
+        } else { ("1000000", "1500000", 8) };
         command.args([
             "-v", "error", "-analyzeduration", analysis, "-probesize", size,
             "-show_entries", "format=duration:stream=index,codec_type,codec_name,color_transfer:stream_tags=language,title:stream_disposition=default,attached_pic",
@@ -160,7 +160,6 @@ async fn collect(mut command: Command, max: u64, limit: Duration) -> Result<Vec<
 fn encode(binary: &PathBuf, request: Encode) -> Result<Child> {
     let mut command = process(binary);
     command.args(["-v", "error", "-nostdin", "-filter_threads", "2", "-filter_complex_threads", "2", "-threads", "3"]);
-    #[cfg(target_os="linux")]
     command.args(["-analyzeduration", "1500000", "-probesize", "3000000"]);
     if matches!(request.format, Format::Webm) {
         command.args(["-readrate", &format!("{:.2}", request.rate * 1.25), "-readrate_initial_burst", "6"]);

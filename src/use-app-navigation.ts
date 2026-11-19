@@ -21,7 +21,7 @@ export function useAppNavigation(view: View, restore: (view: View) => void, scop
   restoreRef.current = restore;
 
   useEffect(() => {
-    if (window.ember) return;
+    if (window.ember && window.ember.platform !== 'android') return;
     const initial = initialized.current
       ? {page: "Home", detail: null, session: null, modal: ""}
       : current.current;
@@ -48,7 +48,7 @@ export function useAppNavigation(view: View, restore: (view: View) => void, scop
   }, [scope]);
 
   useEffect(() => {
-    if (window.ember) return;
+    if (window.ember && window.ember.platform !== 'android') return;
     const next = signature(view);
     if (next !== last.current) {
       const key = crypto.randomUUID();
@@ -64,7 +64,7 @@ export function useAppNavigation(view: View, restore: (view: View) => void, scop
   }, [view.page, view.detail, view.session, view.modal]);
 
   return (fallback: () => void) => {
-    if (!window.ember && history.state?.ember === group.current && depth.current > 0) {
+    if ((!window.ember || window.ember.platform === 'android') && history.state?.ember === group.current && depth.current > 0) {
       history.back();
     } else {
       fallback();

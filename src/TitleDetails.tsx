@@ -6,6 +6,7 @@ import {Play,Plus,Check,X,CheckCircle2,Star,ExternalLink,SlidersHorizontal} from
 import Artwork from './Artwork';
 import {watchIndicator} from './progress-state.mjs';
 import {plainText,trailerId} from './metadata-core.mjs';
+import {ratingSummary} from './ratings-core.mjs';
 const dateLabel=(raw:any)=>{const d=new Date(raw);return raw&&Number.isFinite(d.valueOf())?d.toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'}):'Release date unavailable'};
 const ratingCache = new CatalogCache({ttl:86400000,limit:100});
 export default function TitleDetails({addons,item,season,setSeason,progress,inLibrary,onLibrary,onPlay,onClose,openWebsite}:any){
@@ -39,18 +40,17 @@ export default function TitleDetails({addons,item,season,setSeason,progress,inLi
  const providerRating=item.imdbRating||item.rating, ratingSource=item.imdbRating?'IMDb':item.ratingProvider||'Rating';
  const providerVotes=item.imdbRating?item.imdbVotes||item.imdbVoteCount:item.vote_count||item.votes;
  const imdb=String(item.imdb_id||item.id).match(/^tt\d+$/)?.[0];
- const [extra,setExtra]=useState<{score:number;votes:number}|null>(null);
+ const [extra,setExtra]=useState<{score:number;votes:number;reviewUrl:string}|null>(null);
  useEffect(()=>{
-   if(!imdb||Number(String(providerVotes||0).replaceAll(",",""))>0)return;
+   const addon=addons.find((a:any)=>a.enabled&&a.manifest.id==='imdb.ratings.local');
+   setExtra(null);if(!addon||!imdb)return;
    let active=true;
-   void ratingCache.get(imdb,async()=>{
-     const data=await json("https://api.imdbapi.dev/titles/"+imdb);
-     const score=Number(data.rating?.aggregateRating),votes=Number(data.rating?.voteCount);
-     return score>0&&score<=10&&Number.isSafeInteger(votes)&&votes>0?{score,votes}:null;
+   void ratingCache.get(addon.base+':'+imdb,async()=>{
+     return ratingSummary(await json(addon.base+'/stream/'+item.type+'/'+imdb+'.json'));
    }).then(result=>{if(active)setExtra(result)}).catch(()=>{});
    return ()=>{active=false};
- },[imdb,providerVotes]);
- const fallback=Number(String(providerVotes||0).replaceAll(",",""))>0?null:extra;
+ },[imdb,addons]);
+ const fallback=extra;
  const rating=fallback?.score||providerRating,votes=fallback?.votes||providerVotes;
  const resume=Object.values(progress).filter((p:any)=>p.item?.id===item.id&&!p.hidden&&!p.watched&&p.position>0).sort((a:any,b:any)=>b.updatedAt-a.updatedAt)[0] as any;
  const first=(item.videos||[]).find((v:any)=>v.season>0 && (!v.released||Date.parse(v.released)<=Date.now()));
@@ -61,7 +61,7 @@ export default function TitleDetails({addons,item,season,setSeason,progress,inLi
   <h1>{item.name}</h1><div className="title-facts">{Number(rating)>0&&<span className="rating"><Star size={15} fill="currentColor"/><b>{Number(rating).toFixed(1)}</b> {fallback?"IMDb":ratingSource}{Number(String(votes).replaceAll(',',''))>0&&<small> · {Number(String(votes).replaceAll(',','')).toLocaleString()} ratings</small>}</span>}{[item.runtime,item.status,item.country,item.network].filter(Boolean).map((v:any)=><span key={String(v)}>{String(v)}</span>)}</div>
   <div className="tags">{item.genres?.map((g:string)=><span key={g}>{g}</span>)}</div>
   <p className="title-synopsis">{plainText(item.description)||'A synopsis is not available yet.'}</p>
-  <div className="actions"><button className="primary" onClick={()=>onPlay(item,resume?.video||first)} disabled={item.type==='series'&&(!first||missing.has((resume?.video||first)?.id))}><Play size={18} fill="currentColor"/>{resume?'Resume':'Play'}</button><button className="glass" onClick={()=>onLibrary(item)}>{inLibrary?<Check size={18}/>:<Plus size={18}/>}My library</button>{item.type==="movie"&&<button className="glass" aria-label="Choose movie source" onClick={()=>onPlay(item,undefined,true)}><SlidersHorizontal size={16}/>Sources</button>}<button className="glass" disabled={!yt||yt===failed} onClick={()=>{setTrailer(!trailer);setPlaying(false)}}><Play size={18}/>{trailer&&yt&&yt!==failed?'Close trailer':'Watch trailer'}</button>{imdb&&<button className="glass" onClick={()=>openWebsite(`https://www.imdb.com/title/${imdb}/`)}><ExternalLink size={16}/>IMDb & reviews</button>}</div>
+  <div className="actions"><button className="primary" onClick={()=>onPlay(item,resume?.video||first)} disabled={item.type==='series'&&(!first||missing.has((resume?.video||first)?.id))}><Play size={18} fill="currentColor"/>{resume?'Resume':'Play'}</button><button className="glass" onClick={()=>onLibrary(item)}>{inLibrary?<Check size={18}/>:<Plus size={18}/>}My library</button>{item.type==="movie"&&<button className="glass" aria-label="Choose movie source" onClick={()=>onPlay(item,undefined,true)}><SlidersHorizontal size={16}/>Sources</button>}<button className="glass" disabled={!yt||yt===failed} onClick={()=>{setTrailer(!trailer);setPlaying(false)}}><Play size={18}/>{trailer&&yt&&yt!==failed?'Close trailer':'Watch trailer'}</button>{imdb&&<button className="glass" onClick={()=>openWebsite(extra?.reviewUrl||`https://www.imdb.com/title/${imdb}/reviews/`)}><ExternalLink size={16}/>IMDb & reviews</button>}</div>
   {trailer&&yt&&<div className="title-trailer">{playing?<iframe ref={frame} title={`${item.name} trailer`} src={embedURL} allow="autoplay; encrypted-media; fullscreen; picture-in-picture" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen/>:<button className="trailer-preview" aria-label={`Play ${item.name} trailer`} onClick={()=>setPlaying(true)}><img src={`https://i.ytimg.com/vi/${yt}/hqdefault.jpg`} alt="" loading="lazy"/><span>Play trailer</span></button>}<button className="textbutton" onClick={()=>openWebsite(`https://www.youtube.com/watch?v=${yt}`)}>Open trailer on YouTube</button></div>}
   <dl className="title-credits">{[['Starring',item.cast?.slice(0,8)?.map(plainText)?.join(' · ')],['Director',item.director?.map(plainText)?.join(' · ')],['Language',item.language||item.original_language],['Awards',item.awards]].filter(([,v])=>v).map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
   {seasons.length>0&&<section className="detail-episodes"><div className="sectionhead"><div><span className="eyebrow">KEEP EXPLORING</span><h2>Episodes</h2></div><label>Season<select aria-label="Series season" value={season} onChange={e=>setSeason(Number(e.target.value))}>{seasons.map(n=><option key={n} value={n}>Season {n}</option>)}</select></label></div>

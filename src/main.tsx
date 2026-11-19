@@ -729,7 +729,7 @@ function App() {
               )}
               <footer>
                 <Flame size={16} /> MADE FOR THE WAY YOU WATCH{" "}
-                <span>EMBER / 0.7.6</span>
+                <span>EMBER / 0.7.7</span>
               </footer>
             </>
           )}

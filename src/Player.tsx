@@ -442,7 +442,7 @@ export default function Player({
   async function resolve(source: any, queue = false) {
     if (!queue && (sourceTransport(source) === "http" || (!providerOnly && source.url))) {
       if(browser)return {...source,url:await browserProviderLink(source.url)};
-      if ((linux||android) && window.ember?.mediaRemote && !source.providerRelay && !source.playlist &&
+      if (window.ember?.mediaRemote && !source.providerRelay && !source.playlist &&
           !hlsSource(source) && !source.localTorrent) {
         const remote = await window.ember.mediaRemote(source.url, source.behaviorHints?.proxyHeaders?.request);
         return {...source, ...remote, providerRelay: !remote.playlist};
@@ -505,7 +505,7 @@ export default function Player({
     else v.removeAttribute("crossorigin");
     let mediaError = false;
     let stream: ReturnType<typeof embeddedStream> | undefined;
-    if (browser && source.browserRemux) {
+    if (source.browserRemux) {
       const controller = new AbortController();
       remuxControllers.current[index] = controller;
       const deadline = setTimeout(() => controller.abort(), 20000);
@@ -573,7 +573,7 @@ export default function Player({
     // Metadata-only preload keeps WebKitGTK out of on-disk download mode.
     // Start muted to obtain the first decoded frame, then restore pause on commit.
     if ((linux||android||browser) && v.readyState < 2) {
-      void v.play().catch(() => { if (id === generation.current) mediaError = true; });
+      void v.play().catch(error => { if (id === generation.current && !['AbortError','NotAllowedError'].includes(error?.name)) mediaError = true; });
     }
     await wait(() => !v.seeking && v.readyState >= 2);
     if (!v.videoWidth || !v.videoHeight) throw Error("This source did not display a video picture.");
@@ -624,17 +624,18 @@ export default function Player({
       if (id !== generation.current) return;
       const canPlayAudio=(mime:string)=>videos.current[targetSlot]?.canPlayType(mime);
       const riskyAudio=needsAudioConversion(hintedAudio(input)||hintedAudio(source),canPlayAudio);
-      if (browser && (forceCompatibility||riskyAudio||needsContainerRemux(source)) && !hlsSource(source)) source = {...source,browserRemux:true};
+      const fastRemux=(browser||(!linux&&!!window.MediaSource)) && (source.browserRemux || (browser&&forceCompatibility) || (!forceCompatibility&&(riskyAudio||needsContainerRemux(input)||needsContainerRemux(source)||prefersNative(input))));
+      if (fastRemux && !hlsSource(source)) source = {...source,browserRemux:true};
       const isHls = hlsSource(source);
       const browserType = source.contentType;
       const useRelay = !!source.providerRelay;
-      const requested = !!window.ember && (forceCompatibility ||
+      const requested = !!window.ember && !source.browserRemux && (forceCompatibility ||
         ((volumeRef.current > 100 || riskyAudio) && !isHls) || prefersNative(input) || prefersNative(source) ||
         (!useRelay && !!source.behaviorHints?.proxyHeaders?.request));
-      const infoPromise = !isHls || requested ? probe(source) : Promise.resolve(null);
+      let infoPromise = source.browserRemux ? Promise.resolve(null) : !isHls || requested ? probe(source) : Promise.resolve(null);
       let info = linux && !isHls
         ? await Promise.race<MediaInfo | null>([infoPromise, sleep(1700).then(() => null)])
-        : requested ? await infoPromise : null;
+        : requested ? await Promise.race<MediaInfo|null>([infoPromise,sleep(1200).then(()=>null)]) : null;
       if (id !== generation.current) return;
       const directType = browserType && browserType !== "application/octet-stream"
         ? videos.current[targetSlot]?.canPlayType(browserType) : undefined;
@@ -659,9 +660,10 @@ export default function Player({
           v = await loadVideo(source, targetSlot, id, target(), info, false, change || {});
         } else {
         if (converted || !window.ember || id !== generation.current) throw directError;
+        source={...source,browserRemux:false};
         converted = true;
         if (!had) setStatus("Opening video…");
-        info = linux ? info : await probe(source);
+        info = info || await Promise.race<MediaInfo|null>([probe(source),sleep(1200).then(()=>null)]);
         if (id !== generation.current) return;
         v = await loadVideo(source, targetSlot, id, target(), info, true, change || {});
         }
@@ -724,6 +726,12 @@ export default function Player({
       opening.current = false;
       recoveryFailed.current = false;
       failed.current.delete(source.key);
+      if(source.browserRemux && window.ember){
+        infoPromise=probe(source);
+        void infoPromise.then(available=>{if(id!==generation.current||!available)return;
+          setTracks([...(remuxTracks.current[targetSlot]||[]),...available.tracks.filter(track=>track.type==='sub')]);
+        });
+      }
       
       if (linux && !isHls) {
         const staged = compatibility.current[targetSlot];
@@ -780,7 +788,7 @@ export default function Player({
           }
         });
       }
-      if (!linux && !converted && !isHls) {
+      if (!linux && !converted && !isHls && !source.browserRemux) {
         void infoPromise.then(available => {
           if (id !== generation.current || !available) return;
           setTracks(available.tracks);
@@ -968,6 +976,9 @@ export default function Player({
       const ready=partyReady({loaded:sourceRef.current,opening:opening.current,seeking:v.seeking,blocked:partyPlayBlocked.current,readyState:v.readyState,ahead,ended:time.current.duration>0&&time.current.duration-time.current.position<1,stalled:stalledAt.current>0&&Date.now()-stalledAt.current>1200});
       p?.report({ready,duration:finiteTime(time.current.duration),position:finiteTime(time.current.position),key:mediaKey(partyMedia(s))});
       if(!room){if(!hold.current)v.playbackRate=1;lastPartyRoom.current=null;return;}
+      // Muted startup owns the media element until its first frame is ready.
+      // Pausing it here cancels play(), which used to masquerade as a codec error.
+      if(opening.current || !sourceRef.current)return;
       if(mediaKey(room.media)!==mediaKey(partyMedia(s))){v.pause();return;}
       const now=Date.now(),serverNow=p.serverNow(),previous=lastPartyRoom.current;
       const playing=p.connected&&!room.paused&&!room.waiting,target=partyPosition(room,serverNow);
@@ -1187,7 +1198,7 @@ export default function Player({
       h.audioTrack = track.id;
       return;
     }
-    if (browser && sourceRef.current?.browserRemux) {
+    if (sourceRef.current?.browserRemux) {
       void chooseRef.current(sourceRef.current, true, false, {audio:track.id});
       return;
     }

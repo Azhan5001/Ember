@@ -75,7 +75,7 @@ export async function providerLink(raw) {
     throw Error('Unsupported provider link.');
   for(let redirects=0;redirects<5;redirects++) {
     const response=await fetch(url.href,{redirect:'manual',cache:'no-store',
-      signal:AbortSignal.timeout(10000),headers:{Range:'bytes=0-0','User-Agent':'Ember/0.7.6'}});
+      signal:AbortSignal.timeout(10000),headers:{Range:'bytes=0-0','User-Agent':'Ember/0.7.7'}});
     void response.body?.cancel();
     if([301,302,303,307,308].includes(response.status)) {
       const location=response.headers.get('Location');if(!location)break;
@@ -97,7 +97,12 @@ export default {
     if (!["/api/torbox","/api/provider-link"].includes(url.pathname)) {
       const asset = await env.ASSETS.fetch(request);
       const headers = new Headers(asset.headers);
-      headers.set("X-Ember-Build", "0.7.6");
+      headers.set("X-Ember-Build", "0.7.7");
+      if(url.pathname==='/trailer.html') {
+        headers.set('X-Frame-Options','SAMEORIGIN');
+        headers.set('Content-Security-Policy',"frame-ancestors 'self'");
+        headers.set('Referrer-Policy','strict-origin-when-cross-origin');
+      }
       if (headers.get("Content-Type")?.includes("text/html") || url.pathname === "/ember-build.json") {
         headers.set("Cache-Control", "no-store, max-age=0");
         headers.delete("ETag");

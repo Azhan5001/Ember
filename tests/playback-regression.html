@@ -1,8 +1,11 @@
 <!doctype html><html><body><div id="root"></div><script type="module">
 import React from 'react';import{createRoot}from'react-dom/client';import Player from '/src/Player.tsx';import '/src/style.css';
 const params=new URLSearchParams(location.search),file=params.get('file')||'safari-dts.mkv';
+if(params.has('platform'))window.ember={platform:params.get('platform'),mediaRemote:async url=>({url,playlist:false,contentType:'video/x-matroska'}),mediaProbe:async()=>{await new Promise(r=>setTimeout(r,6000));return null},mediaOpen:async()=>{throw Error('Unexpected native conversion')},torrentRetain:async()=>{},checkpoint(){},nativeCancel:async()=>{},nativeCommand:async()=>{}};
 const state={addons:[],library:[],history:{},progress:{},settings:{quality:0,native:false,audio:'auto',subtitleLanguage:'off',seriesSources:{},subtitleDelays:{},subtitleAppearance:{},qualityFallback:true}};
 const source={key:'fixture',name:'1080p',url:location.origin+'/tests/'+file,quality:1080,behaviorHints:{filename:params.has('unlabelled')?'video':file}};
 const session={item:{id:'fixture',type:'movie',name:'Audio fixture',videos:[]},vid:'fixture',candidates:[source],profileScope:'[null,"guest"]'};
-createRoot(document.querySelector('#root')).render(React.createElement(Player,{session,state,party:{snapshot:null,report(){}},onClose(){},onOpenAddons(){},onProgress(){},onNext(){},onNotice:console.log,onSetting(){},onEpisode(){},onPrefetch(){}}));
+const party={snapshot:params.has('party')?{room:{id:'fixture-room',media:{id:'fixture',type:'movie',vid:'fixture'},position:0,paused:true,waiting:true,anchor_at:new Date().toISOString(),epoch:1},members:[]}:null,connected:true,isHost:true,client:'fixture-client',serverNow:()=>Date.now(),report(value){window.__partyReport=value},command(){}};
+window.__testParty=party;
+createRoot(document.querySelector('#root')).render(React.createElement(Player,{session,state,party,onClose(){},onOpenAddons(){},onProgress(){},onNext(){},onNotice:console.log,onSetting(){},onEpisode(){},onPrefetch(){}}));
 </script></body></html>

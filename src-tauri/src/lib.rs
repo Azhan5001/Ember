@@ -70,7 +70,8 @@ fn link(raw:&str)->Option<String>{let u=raw.replacen("stremio://","https://",1).
 pub fn run(){
  let runtime=tokio::runtime::Builder::new_multi_thread().worker_threads(2).max_blocking_threads(8).enable_all().build().expect("Async runtime unavailable");tauri::async_runtime::set(runtime.handle().clone());
  let builder=tauri::Builder::default().plugin(tauri_plugin_opener::init());
- #[cfg(desktop)]let builder=builder.plugin(tauri_plugin_single_instance::init(|app,args,_|{if let Some(s)=app.try_state::<Backend>(){for u in args.iter().filter_map(|u|link(u)){s.links.lock().unwrap().push(u.clone());let _=app.emit("addon-link",u);}}if let Some(w)=app.get_webview_window("main"){let _=w.unminimize();let _=w.set_focus();}})).plugin(tauri_plugin_deep_link::init());
+ #[cfg(desktop)]let builder=if std::env::var_os("EMBER_DATA_DIR").is_some(){builder}else{builder.plugin(tauri_plugin_single_instance::init(|app,args,_|{if let Some(s)=app.try_state::<Backend>(){for u in args.iter().filter_map(|u|link(u)){s.links.lock().unwrap().push(u.clone());let _=app.emit("addon-link",u);}}if let Some(w)=app.get_webview_window("main"){let _=w.unminimize();let _=w.set_focus();}}))};
+ #[cfg(desktop)]let builder=builder.plugin(tauri_plugin_deep_link::init());
  builder.setup(|app|{
   let root=std::env::var_os("EMBER_DATA_DIR").map(PathBuf::from).unwrap_or(app.path().app_data_dir()?);
   #[cfg(debug_assertions)]let root=acceptance::profile().unwrap_or(root);
