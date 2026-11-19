@@ -1,3 +1,4 @@
+import {isAio,isFallback,hasAio,isGenreCatalog,catalogPriority,catalogFacet} from './metadata-provider.mjs';
 // Provider-neutral catalog planning. Resource types are never replaced in URLs.
 export const SORTS = { default: 'Default', popularity: 'Popularity', trending: 'Trending', airing: 'Top airing', rating: 'Highest rated', votes: 'Most rated', newest: 'Newest' };
 const key = s => { const k=String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); return ({sciencefiction:'scifi',scifi:'scifi',koreandrama:'kdrama',animated:'animation'})[k] || k; };
@@ -11,26 +12,37 @@ export function feedSort(c) {
   if (/votecount|mostvoted|mostrated/.test(s)) return 'votes';
   if (/rating|rated|imdb/.test(s)) return 'rating';
   if (/trending/.test(s)) return 'trending';
-  if (/popular|^top/.test(s)) return 'popularity';
+  if (/popular|^top|tmdbtop|topanime/.test(s)) return 'popularity';
   if (/new|latest|year|release/.test(s)) return 'newest';
   return 'default';
 }
 export function catalogLabel(a,c){
  const provider=key(a.manifest?.id+' '+a.manifest?.name),name=String(c.name||c.id);
+ if(isAio(a))return /movies?|series|anime|schedule|seasons/i.test(name)?name:name+' '+(c.type==='movie'?'movies':c.type==='series'?'series':'anime');
  if(provider.includes('cinemeta')){const label=name.replace(/^cinemeta\s*[-·:]?\s*/i,'');return /movies?|series|shows?/i.test(label)?label:label+' '+(c.type==='movie'?'movies':'series')}
  if(/animes?seasons?/.test(provider)){let label=name.replace(/^anime[’']?s?\s*seasons?\s*[-·:]\s*/i,'');if(/^anime years?$/i.test(label))label='Anime of the year';return label}
  return `${a.manifest.name} · ${name}`;
 }
-/** @param {any[]} addons @param {string} type @param {string} search @param {{genres?: string[], sort?: string}} options */
-export function catalogJobs(addons, type = 'all', search = '', { genres = [], sort = 'default' } = {}) {
-  return addons.filter(a => a.enabled && !a.manifest.behaviorHints?.configurationRequired && !/(?:torrentio|torrenio)\s*tb/i.test(`${a.manifest?.name || ''} ${a.manifest?.id || ''} ${a.base || ''}`)).flatMap(a => (a.manifest.catalogs || []).flatMap(c => {
+/** @param {any[]} addons @param {string} type @param {string} search @param {{genres?: string[], sort?: string,facets?:any}} options */
+export function catalogJobs(addons, type = 'all', search = '', { genres = [], sort = 'default', facets={} } = {}) {
+  return addons.filter(a => a.enabled && !(hasAio(addons)&&isFallback(a)) && !a.manifest.behaviorHints?.configurationRequired && !/(?:torrentio|torrenio)\s*tb/i.test(`${a.manifest?.name || ''} ${a.manifest?.id || ''} ${a.base || ''}`)).flatMap(a => (a.manifest.catalogs || []).flatMap(c => {
     if (!c.type || !c.id || (type !== 'all' && ['movie','series'].includes(c.type) && c.type !== type)) return [];
     const ex = extras(c), extra = {};
+    const facet=catalogFacet(c),activeFacet=Object.keys(facets).find(k=>facets[k]);
+    if(isAio(a)){
+      if(type==='movie'&&c.type==='anime.series'||type==='series'&&c.type==='anime.movie')return [];
+      if(activeFacet&&facet!==activeFacet)return [];
+      if(search&&!activeFacet&&!ex.some(e=>e.name==='search'))return [];
+      if(!search&&!activeFacet&&facet)return [];
+      if(!search&&!activeFacet&&/tvdb.collections|mal.schedule/.test(c.id))return [];
+      if(!search&&!genres.length&&/tvdb.genres|tvdb.trending|mal.genres/.test(c.id))return [];
+      if(facet&&facets[facet])extra.genre=facets[facet];
+    }
     const localSearch = search && !ex.some(e => e.name === 'search') ? search : '';
     if (search && !localSearch) extra.search = search;
     const genre = ex.find(e => e.name === 'genre');
     const selected = genres.find(g => genre?.options?.some(o => key(o) === key(g)));
-    if (selected) extra.genre = genre.options.find(o => key(o) === key(selected));
+    if (selected&&!facet) extra.genre = genre.options.find(o => key(o) === key(selected));
     const sorter = ex.find(e => ['sort','sort_by','order'].includes(e.name));
     const order = sorter?.options?.find(o => feedSort({ id:o, name:o }) === sort);
     if (sort !== 'default' && order) extra[sorter.name] = order;
@@ -40,24 +52,24 @@ export function catalogJobs(addons, type = 'all', search = '', { genres = [], so
       extra[e.name] = e.options[0];
     }
     return [{ addon: a, catalog: c, type: c.type, extra, localSearch, feedSort: order ? sort : feedSort(c), name: catalogLabel(a,c), pageable: ex.some(e => e.name === 'skip') }];
-  }));
+  })).sort((a,b)=>catalogPriority(a)-catalogPriority(b));
 }
 export function genreOptions(addons) {
   const common = ['Anime','K-drama','Action','Adventure','Comedy','Drama','Romance','Thriller','Sci-Fi','Fantasy','Mystery','Horror','Animation','Documentary','Crime','Family','Adult','Nudity'];
-  const all = addons.filter(a => a.enabled).flatMap(a => (a.manifest.catalogs || []).flatMap(c => [...(c.genres || []), ...(extras(c).find(e => e.name === 'genre')?.options || [])]));
-  return [...new Map([...common, ...all.filter(g => !/^\d{4}$/.test(g))].map(g => [key(g),g])).values()];
+  const all = addons.filter(a => a.enabled).flatMap(a => (a.manifest.catalogs || []).filter(c=>!isAio(a)||isGenreCatalog(c)).flatMap(c => [...(c.genres || []), ...(extras(c).find(e => e.name === 'genre')?.options || [])]));
+  const seen=new Set();return [...common,...all].filter(g=>{const k=key(g);if(!k||seen.has(k)||/^\d{4}$/.test(g)||/^(none|all|fall|winter|spring|summer)$/i.test(g))return false;seen.add(k);return true;});
 }
 export function normalizeItem(raw, job = {}) {
   const c = job.catalog || {}, a = job.addon || {};
   const japaneseAnimation = /japan|^ja$|^jpn$/.test(key([raw.country,raw.language,raw.original_language].join(' '))) && raw.genres?.some(g => key(g) === 'animation');
-  const anime = japaneseAnimation || c.type === 'anime' || /^(kitsu|mal|anilist|anidb):/.test(raw.id) || /anime/i.test(`${c.id || ''} ${c.name || ''}`);
+  const anime = japaneseAnimation || /^anime/.test(c.type||'') || /^(kitsu|mal|anilist|anidb):/.test(raw.id) || /anime/i.test(`${c.id || ''} ${c.name || ''}`);
   const format = key(raw.media_type || raw.format || raw.subtype);
-  const type = raw.type === 'movie' || format === 'movie' ? 'movie' : raw.type === 'series' || raw.type === 'anime' || c.type === 'anime' || raw.videos?.length ? 'series' : raw.type || c.type;
+  const type = raw.type === 'movie' || raw.type==='anime.movie' || c.type==='anime.movie' || format === 'movie' ? 'movie' : raw.type === 'series' || /^anime/.test(raw.type||'') || /^anime/.test(c.type||'') || raw.videos?.length ? 'series' : raw.type || c.type;
   const korean = /korean|southkorea|^kr$|^ko$|^kor$/.test(key([raw.country,raw.language,raw.original_language].join(' ')));
   const kdrama = /k.?drama|korean.*drama|korean.*(latest|trending)/i.test(`${c.name || ''} ${c.id || ''}`) || (korean && raw.genres?.some(g => key(g) === 'drama'));
   const linkedGenres=(raw.links||[]).filter(l=>l.category==='Genres').map(l=>l.name);
   const declaredGenres = raw.genres?.length ? raw.genres : raw.genre?.length ? raw.genre : linkedGenres.length ? linkedGenres : String(raw.description || '').match(/^Genres:\s*([^\n]+)/)?.[1]?.split(',').map(g=>g.trim()).filter(Boolean);
-  return { ...raw, genres:declaredGenres, type, resourceType: raw.resourceType || c.type || raw.type, provider: raw.provider || a.base, categories: [...new Set([...(raw.categories || []), ...(anime ? ['Anime'] : []), ...(kdrama ? ['K-drama'] : [])])], confirmedGenres: [...new Set([...(raw.confirmedGenres || []), ...(job.extra?.genre && !/^\d{4}$/.test(job.extra.genre) ? [job.extra.genre] : [])])], ranks: { ...(raw.ranks || {}), ...(job.feedSort && job.feedSort !== 'default' ? { [job.feedSort]: job.rank ?? 0 } : {}) } };
+  return { ...raw, catalogFacets:{...(raw.catalogFacets||{}),...(catalogFacet(c)&&job.extra?.genre?{[catalogFacet(c)]:job.extra.genre}:{})}, genres:[...new Set([...(Array.isArray(declaredGenres)?declaredGenres:[]),...(Array.isArray(raw.keywords)?raw.keywords.map(t=>typeof t==='string'?t:t?.name).filter(Boolean):[])])], type, resourceType: raw.resourceType || c.type || raw.type, provider: raw.provider || a.base, categories: [...new Set([...(raw.categories || []), ...(anime ? ['Anime'] : []), ...(kdrama ? ['K-drama'] : [])])], confirmedGenres: [...new Set([...(raw.confirmedGenres || []), ...(job.extra?.genre && !catalogFacet(c) && (!isAio(a)||isGenreCatalog(c)) && !/^\d{4}$/.test(job.extra.genre) ? [job.extra.genre] : [])])], ranks: { ...(raw.ranks || {}), ...(job.feedSort && job.feedSort !== 'default' ? { [job.feedSort]: job.rank ?? 0 } : {}) } };
 }
 /** @param {any} i @param {string[]} selected */
 export function matchesGenres(i, selected = []) {

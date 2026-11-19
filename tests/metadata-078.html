@@ -1,0 +1,4 @@
+<html><body style="background:#15131a;color:white"><div id="root"></div><script type="module">
+import React from 'react';import {createRoot} from 'react-dom/client';import GenreFilter from '/src/GenreFilter';import {essentials} from '/src/defaults';import {genreOptions} from '/src/catalog-core.mjs';import {catalogs,metadata} from '/src/api';import {cachedMetadata} from '/src/metadata-cache.mjs';import '/src/style.css';
+window.__metadataTest={essentials,catalogs,metadata,cachedMetadata};function Test(){const [selected,setSelected]=React.useState([]);return React.createElement('section',{className:'catalogfilters',style:{maxWidth:800}},React.createElement(GenreFilter,{options:genreOptions(essentials),selected,onChange:setSelected}));}createRoot(document.getElementById('root')).render(React.createElement(Test));
+</script></body></html>

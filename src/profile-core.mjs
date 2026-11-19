@@ -51,15 +51,15 @@ export function ensurePeople(state, empty) {
       state={...state,...(!people.owner || people.activeId==='guest' ? {addons:clean.addons} : {}),_people:people};
     }
     const defaults=snapshot(empty).addons;
-    if(people.guestDefaultsVersion!==2 || Object.values(people.accounts || {}).some(a=>a.addonDefaultsVersion!==2)){
+    if(people.guestDefaultsVersion!==3 || Object.values(people.accounts || {}).some(a=>a.addonDefaultsVersion!==3)){
       const guest=people.guest || (!people.owner?snapshot(state):snapshot(empty));
       const accounts=Object.fromEntries(Object.entries(people.accounts || {}).map(([id,account])=>{
-        if(account.addonDefaultsVersion===2)return [id,account];
+        if(account.addonDefaultsVersion===3)return [id,account];
         const sharedAddons=addDefaults(account.sharedAddons,defaults);
         const spaces=Object.fromEntries(Object.entries(account.spaces || {}).map(([key,part])=>[key,{...part,addons:addDefaults(part.addons,defaults)}]));
-        return [id,{...account,sharedAddons,spaces,addonDefaultsVersion:2}];
+        return [id,{...account,sharedAddons,spaces,addonDefaultsVersion:3}];
       }));
-      people={...people,guest:{...guest,addons:addDefaults(guest.addons,defaults)},guestDefaultsVersion:2,accounts};
+      people={...people,guest:{...guest,addons:addDefaults(guest.addons,defaults)},guestDefaultsVersion:3,accounts};
       const active=people.owner && people.activeId!=='guest' ? accounts[people.owner] : null;
       const entry=active?.profiles?.find(p=>p.id===people.activeId);
       state={...state,addons:active?(entry?.isolatedAddons?spacesFor(active,people.activeId).addons:active.sharedAddons):people.guest.addons,_people:people};
@@ -110,7 +110,7 @@ export function ensureAccount(state,owner,empty) {
   if (people.accounts[owner]) return state;
   const part=snapshot(empty);
   part.profile='You';
-  const account={profiles:[{id:'main',name:'You',avatar:0,isolatedAddons:false,kids:false}],spaces:{main:part},sharedAddons:clone(part.addons),addonDefaultsVersion:2,syncEnabled:true};
+  const account={profiles:[{id:'main',name:'You',avatar:0,isolatedAddons:false,kids:false}],spaces:{main:part},sharedAddons:clone(part.addons),addonDefaultsVersion:3,syncEnabled:true};
   return {...state,_people:{...people,accounts:{...people.accounts,[owner]:account}}};
 }
 export function enterProfile(state,owner,id,empty) {

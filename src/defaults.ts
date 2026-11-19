@@ -1,4 +1,7 @@
+import aioManifest from "./aiometadata-manifest.json";
+import {AIO_BASE} from "./metadata-provider.mjs";
 export const essentials = [
+  {base:AIO_BASE,enabled:true,manifest:aioManifest},
   {base:'https://imdbratings.kgenovz.com',enabled:true,manifest:{id:'imdb.ratings.local',version:'1.0.0',name:'IMDb Ratings',description:'IMDb scores, vote counts and review links.',resources:['stream'],types:['movie','series'],catalogs:[],idPrefixes:['tt','kitsu','tmdb']}},
   {
     base: "https://v3-cinemeta.strem.io",
@@ -761,7 +764,7 @@ export function migrate(s: any) {
     "autoplay",
   ])
     delete s.settings[k];
-  if (s.addonDefaultsVersion !== 4) {
+  if (s.addonDefaultsVersion !== 5) {
     const addons = [...(s.addons || [])];
     for (const a of essentials) {
       const i = addons.findIndex((b) => a.manifest.id === b.manifest.id);
@@ -769,7 +772,7 @@ export function migrate(s: any) {
       else if (a.manifest.id === "com.linvo.cinemeta" && addons[i].base === a.base && !addons[i].manifest.version) addons[i] = { ...a, enabled:addons[i].enabled };
       else if (a.manifest.id === "com.stremio.torrentio.addon" && addons[i].base === a.base) addons[i] = {...addons[i],manifest:{...addons[i].manifest,types:a.manifest.types,idPrefixes:a.manifest.idPrefixes}};
     }
-    s = { ...s, addons, addonDefaultsVersion: 4 };
+    s = { ...s, addons, addonDefaultsVersion: 5 };
   }
   return s;
 }

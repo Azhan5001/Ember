@@ -1,3 +1,5 @@
+import {isAio,isFallback,hasAio,matchesFacets} from './metadata-provider.mjs';
+import {cachedMetadata} from './metadata-cache.mjs';
 import { enrichTV, discoverySupplement, episodeArtwork } from './metadata-enrichment';
 import { enrichMetadata, matchEpisode } from './metadata-core.mjs';
 import type { MediaInfo } from "./embedded-media";
@@ -104,11 +106,11 @@ const known = new Map<string, {item:Item; at:number}>();
 const metaCache = new CatalogCache({ limit: 128 });
 async function providerMeta(a: Addon, type: string, id: string, priority=false) {
   const url = resourceUrl(a.base, "meta", type, id);
-  return metaCache.get(url, () => limited(() => json(url).then(r => r.meta || null),priority));
+  return metaCache.get(url, () => limited(() => cachedMetadata(url,()=>json(url)).then(r => r.meta || null),priority));
 }
 export async function catalogs(
   addons: Addon[], type = "all", search = "",
-  options: { onUpdate?: (result: any) => void; force?: boolean; lazy?: boolean; genres?: string[]; sort?: string; active?: () => boolean } = {},
+  options: { onUpdate?: (result: any) => void; force?: boolean; lazy?: boolean; genres?: string[]; sort?: string; facets?:any; active?: () => boolean } = {},
 ) {
   const jobs = catalogJobs(addons, type, search, options);
   let supplemental: Item[] = [];
@@ -116,7 +118,7 @@ export async function catalogs(
   const selected = options.genres || [], checked = new Set<string>();
   const rows: any[] = jobs.map((j: any) => {
     const url = resourceUrl(j.addon.base,"catalog",j.type,j.catalog.id,j.extra);
-    return { ...j, url, items: (cache.peek(url) || []).map((i: any, rank: number) => normalizeItem(i,{...j,rank})), loaded: !!cache.peek(url), loading:false, error:false, offset:cache.peek(url)?.length || 0, exhausted:false };
+    return { ...j, url, items: (cache.peek(url) || []).map((i: any, rank: number) => normalizeItem(i,{...j,rank})), loaded: false, loading:false, error:false, offset:cache.peek(url)?.length || 0, exhausted:false };
   });
   const allItems = () => mergeItems([...supplemental,...rows.flatMap(r => search ? searchItems(r.items,search) : r.items).map((i: Item) => {
     const hit = known.get(i.type+":"+i.id);
@@ -128,7 +130,7 @@ export async function catalogs(
     return rows.map(r=>({...r,items:(search?searchItems(r.items,search):r.items).flatMap((i:Item)=>{const canonical=all.find((candidate:Item)=>sameTitle(candidate,i));if(!canonical||seen.some(old=>sameTitle(old,canonical)))return [];seen.push(canonical);return [canonical];})}));
   };
   const snapshot = () => {
-    const all=allItems(), matches=all.filter((i:Item)=>matchesGenres(i,selected));
+    const all=allItems(), matches=all.filter((i:Item)=>matchesGenres(i,selected)&&matchesFacets(i,options.facets));
     const ranked=sortItems(search?searchItems(matches,search):matches,options.sort);
     return {
       items: options.lazy?ranked:ranked.slice(0,visibleLimit), rows:uniqueRows(all),
@@ -159,7 +161,7 @@ export async function catalogs(
     try {
       const raw = await cache.get(url, () => limited(async () => {
         if (options.active?.() === false) return [];
-        const data = await json(url);
+        const data = await cachedMetadata(url,()=>json(url),{force:!!options.force,onRefresh:(data:any)=>{if(!more&&Array.isArray(data?.metas)&&options.active?.()!==false){r.items=data.metas.map((i:any,rank:number)=>normalizeItem(i,{...r,rank}));publish();}}});
         if (!Array.isArray(data.metas)) throw Error("Invalid catalog");
         return data.metas.filter((i: any) => i.id && i.name);
       }), !!options.force);
@@ -174,7 +176,13 @@ export async function catalogs(
       r.offset = more ? r.offset+raw.length : raw.length;
       r.exhausted = !raw.length || (more && r.items.length === before);
       r.loaded = true; r.error = false;
-    } catch { r.error = true; r.loaded = true; }
+    } catch {
+      r.error = true; r.loaded = true;
+      if(isAio(r.addon)&&!more){
+        const backups=catalogJobs(addons.filter(a=>isFallback(a)),r.type.startsWith('anime')?'all':r.type,search,{genres:selected});
+        for(const backup of backups.slice(0,2)){try{const data=await json(resourceUrl(backup.addon.base,'catalog',backup.type,backup.catalog.id,backup.extra));if(data.metas?.length){r.items=data.metas.map((i:any,rank:number)=>normalizeItem(i,{...backup,rank}));r.name=backup.name;r.error=false;r.pageable=false;break;}}catch{}}
+      }
+    }
     finally { r.loading = false; publish(); }
   };
   publish();
@@ -192,15 +200,13 @@ export async function catalogs(
   return snapshot();
 }
 export async function metadata(addons: Addon[], item: Item, episodes=true) {
-  const ordered = [...addons].filter(a=>a.enabled).sort((a,b) => Number(b.base === item.provider)-Number(a.base === item.provider));
-  const jobs=ordered.map(a=>({a,t:resourceTypeFor(a.manifest,"meta",item.type,item.id,item.resourceType,supports)})).filter(j=>j.t).slice(0,4);
-  const results=await Promise.allSettled(jobs.map(async({a,t})=>{
-    const m=await providerMeta(a,t!,item.id,episodes);
-    return m?.id===item.id?normalizeItem({...m,resourceType:t,provider:a.base},{catalog:{type:t}}):null;
-  }));
+  const ordered = [...addons].filter(a=>a.enabled).sort((a,b) => Number(isAio(b))-Number(isAio(a)) || Number(b.base === item.provider)-Number(a.base === item.provider));
+  const jobs=ordered.map(a=>({a,t:resourceTypeFor(a.manifest,"meta",item.type,item.id,item.resourceType,supports)})).filter(j=>j.t);
   let combined:any=item;
-  for(const r of results)if(r.status==='fulfilled'&&r.value)combined=enrichMetadata(combined,r.value);
-  combined=normalizeItem(await enrichTV(combined,episodes));
+  const primary=jobs.find(j=>isAio(j.a));let supplied=false;
+  if(primary){try{const m=await providerMeta(primary.a,primary.t!,item.id,episodes);if(m?.id===item.id){combined=enrichMetadata(normalizeItem({...m,resourceType:primary.t,provider:primary.a.base},{catalog:{type:primary.t}}),item);supplied=true;}}catch{}}
+  if(!supplied){const results=await Promise.allSettled(jobs.filter(j=>!isAio(j.a)).slice(0,4).map(async({a,t})=>{const m=await providerMeta(a,t!,item.id,episodes);return m?.id===item.id?normalizeItem({...m,resourceType:t,provider:a.base},{catalog:{type:t}}):null;}));for(const r of results)if(r.status==='fulfilled'&&r.value)combined=enrichMetadata(combined,r.value);}
+  combined=normalizeItem(supplied?combined:await enrichTV(combined,episodes));
   known.set(item.type+":"+item.id,{item:combined,at:Date.now()});
   return combined as Item;
 }
