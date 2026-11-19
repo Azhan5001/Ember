@@ -1,13 +1,13 @@
 #[cfg(debug_assertions)]mod acceptance;
 mod media;mod torbox;mod downloads;
-#[cfg(any(target_os="linux",target_os="android"))] mod remote;
+ mod remote;
 #[cfg(target_os="linux")] mod torrent_space;
 mod resources;mod metrics;mod network;mod storage;mod player;mod torrents;mod server;
 use tauri::{Manager,Emitter};
 use serde_json::{Value,json};
 use std::{sync::{Arc,Mutex},path::PathBuf};
 use player::Player;use storage::Store;use torrents::Torrents;
-struct Backend{downloads:Arc<downloads::Downloads>,#[cfg(any(target_os="linux",target_os="android"))] remote:Arc<remote::Remote>,media:Arc<media::Media>,store:Store,client:reqwest::Client,player:Arc<Player>,torrents:Arc<Torrents>,base:String,links:Mutex<Vec<String>>}
+struct Backend{downloads:Arc<downloads::Downloads>, remote:Arc<remote::Remote>,media:Arc<media::Media>,store:Store,client:reqwest::Client,player:Arc<Player>,torrents:Arc<Torrents>,base:String,links:Mutex<Vec<String>>}
 type Cmd<T>=Result<T,String>;
 fn error(e:impl std::fmt::Display)->String{e.to_string()}
 fn link(raw:&str)->Option<String>{let u=raw.replacen("stremio://","https://",1).replacen("ember://","https://",1);let u=network::checked(&u).ok()?;if !u.path().ends_with("/manifest.json")||u.fragment().is_some(){return None}Some(u.to_string())}
@@ -36,14 +36,12 @@ fn link(raw:&str)->Option<String>{let u=raw.replacen("stremio://","https://",1).
 }
 #[tauri::command]async fn torrent_retain(s:tauri::State<'_,Backend>,url:Option<String>)->Cmd<()>{s.torrents.retain(url,&s.base).await.map_err(error)}
 #[tauri::command]async fn media_remote(s:tauri::State<'_,Backend>,url:String,headers:Option<Value>)->Cmd<Value>{
- #[cfg(any(target_os="linux",target_os="android"))]
+ 
  {
   let headers=network::headers(&headers.unwrap_or_default()).map_err(error)?;
   let opened=s.remote.open(&url,headers).await.map_err(error)?;
   Ok(json!({"url":if opened.playlist{url}else{format!("{}/remote/{}",s.base,opened.id)},"contentType":opened.content_type,"playlist":opened.playlist}))
  }
- #[cfg(not(any(target_os="linux",target_os="android")))]
- { let _=(s,url,headers); Err("The provider relay is available on Linux.".into()) }
 }
 #[tauri::command]async fn torbox_stream(s:tauri::State<'_,Backend>,token:String,hash:String,index:Option<u64>,filename:Option<String>,movie:bool,queue:Option<bool>)->Cmd<Value>{torbox::resolve(&s.client,&token,&hash,index,filename.as_deref(),movie,queue.unwrap_or(false)).await.map_err(error)}
 #[tauri::command]async fn media_probe(s:tauri::State<'_,Backend>,input:media::Input)->Cmd<Value>{s.media.probe(input).await.map_err(error)}
@@ -93,8 +91,8 @@ pub fn run(){
     .or_else(||bundled.filter(|p|p.is_file())).unwrap_or_else(||if dev.is_file(){dev}else{PathBuf::from(filename)})
   };
   let media=Arc::new(media::Media::new(media_binary("ffmpeg"),media_binary("ffprobe")));
-  #[cfg(any(target_os="linux",target_os="android"))] let remote=Arc::new(remote::Remote::new()?);
-  let base=tauri::async_runtime::block_on(server::start(server::Server{#[cfg(any(target_os="linux",target_os="android"))] remote:remote.clone(),media:media.clone(),token:uuid::Uuid::new_v4().to_string(),client:client.clone(),torrents:torrents.clone(),images:Arc::new(tokio::sync::Semaphore::new(4))}))?;
+   let remote=Arc::new(remote::Remote::new()?);
+  let base=tauri::async_runtime::block_on(server::start(server::Server{ remote:remote.clone(),media:media.clone(),token:uuid::Uuid::new_v4().to_string(),client:client.clone(),torrents:torrents.clone(),images:Arc::new(tokio::sync::Semaphore::new(4))}))?;
   let filename=if cfg!(windows){"mpv.exe"}else{"mpv"};
   let bundled=app.path().resource_dir()?.join("mpv").join(filename);
   let dev=PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../vendor/mpv").join(filename);
@@ -104,7 +102,7 @@ pub fn run(){
   #[cfg(target_os="linux")]
   if let Some(window)=app.get_webview_window("main") { resources::limit_linux_cache(&window); }
   let downloads=Arc::new(downloads::Downloads::new(app.path().download_dir().unwrap_or(root.join("downloads")).join("Ember"),root.join("download-cache")));
-  app.manage(Backend{downloads,#[cfg(any(target_os="linux",target_os="android"))] remote,media,store,client,player,torrents,base,links});
+  app.manage(Backend{downloads, remote,media,store,client,player,torrents,base,links});
   #[cfg(desktop)]{use tauri_plugin_deep_link::DeepLinkExt;let handle=app.handle().clone();app.deep_link().on_open_url(move|event|{let s=handle.state::<Backend>();for u in event.urls().iter().filter_map(|u|link(u.as_str())){s.links.lock().unwrap().push(u.clone());let _=handle.emit("addon-link",u);}});}
   #[cfg(debug_assertions)]if acceptance::profile().is_some(){let handle=app.handle().clone();tauri::async_runtime::spawn(async move{tokio::time::sleep(std::time::Duration::from_secs(2)).await;acceptance::run(handle,root).await;});}
   Ok(())

@@ -2,12 +2,12 @@ use axum::{Router,routing::get,extract::{State,Path,Query},http::{StatusCode,Hea
 use std::{sync::Arc,collections::HashMap};
 use tokio::io::{AsyncReadExt,AsyncSeekExt};
 use crate::{network,torrents::Torrents};
-#[derive(Clone)]pub struct Server{pub token:String,#[cfg(any(target_os="linux",target_os="android"))] pub remote:Arc<crate::remote::Remote>,pub media:Arc<crate::media::Media>,pub client:reqwest::Client,pub torrents:Arc<Torrents>,pub images:Arc<tokio::sync::Semaphore>}
+#[derive(Clone)]pub struct Server{pub token:String, pub remote:Arc<crate::remote::Remote>,pub media:Arc<crate::media::Media>,pub client:reqwest::Client,pub torrents:Arc<Torrents>,pub images:Arc<tokio::sync::Semaphore>}
 pub async fn start(s:Server)->anyhow::Result<String>{
  let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await?;let port=listener.local_addr()?.port();let base=format!("http://127.0.0.1:{port}/{}",s.token);
- #[cfg(any(target_os="linux",target_os="android"))] let remote=s.remote.routes(s.token.clone());
+  let remote=s.remote.routes(s.token.clone());
  let router=Router::new().route("/{token}/art",get(art)).route("/{token}/trailer/{id}",get(trailer)).route("/{token}/torrent/{hash}/{index}",get(torrent)).route("/{token}/media/{id}",get(crate::media::video)).with_state(s);
- #[cfg(any(target_os="linux",target_os="android"))] let router=router.merge(remote);
+  let router=router.merge(remote);
  tokio::spawn(async move{let _=axum::serve(listener,router).await;});Ok(base)
 }
 async fn art(State(s):State<Server>,Path(token):Path<String>,Query(q):Query<HashMap<String,String>>)->Response{
