@@ -39,3 +39,9 @@ test('deletion markers are local to the profile and deliberate rewatch is allowe
  assert.equal(mergeProgressState(s,rewatch).progress['series:ep'].position,1);
  assert.equal(Object.keys(project(s)).some(k=>k.includes('_progressDeleted')),false);
 });
+test('a delayed full-state save cannot resurrect progress after erasure',()=>{
+ const before=profiles(),erased=eraseHistory(before,false);
+ const next=mergeProgressState(erased,before);
+ assert.deepEqual(next.progress,{});
+ assert.ok(next._progressDeleted['series:ep']>=watch.updatedAt);
+});

@@ -154,11 +154,15 @@ pub fn update_watch(old:Value,p:Value)->Value {
 pub fn merge_progress(old:&Value,new:&mut Value){
  if profile_scope(old)!=profile_scope(new){return}
  let scoped=new["_people"].is_object();
+ let mut deleted=old["_progressDeleted"].as_object().cloned().unwrap_or_default();
+ if let Some(markers)=new["_progressDeleted"].as_object(){for(id,at)in markers{
+  let latest=deleted.get(id).and_then(Value::as_u64).unwrap_or(0).max(at.as_u64().unwrap_or(0));deleted.insert(id.clone(),json!(latest));
+ }}
  let mut progress=old["progress"].as_object().cloned().unwrap_or_default();
  if scoped {progress=new["progress"].as_object().cloned().unwrap_or_default();}
  if let Some(p)=new["progress"].as_object(){progress.extend(p.clone());}
  if let Some(p)=old["progress"].as_object(){for(id,v) in p{
-  let deleted_at=new["_progressDeleted"][id].as_u64().unwrap_or(0);
+  let deleted_at=deleted.get(id).and_then(Value::as_u64).unwrap_or(0);
   if deleted_at>0 && deleted_at>=v["updatedAt"].as_u64().unwrap_or(0) && deleted_at>=new["progress"][id]["updatedAt"].as_u64().unwrap_or(0){progress.remove(id);continue}
   if scoped && new["progress"][id].is_null(){continue}
   let k=if scoped && new["_people"]["owner"].is_string(){format!("space:{}:progress:{id}",new["_people"]["activeId"].as_str().unwrap_or("guest"))}else{format!("progress:{id}")};let nr=new["_sync"]["revisions"][&k].as_u64().unwrap_or(0);let or=old["_sync"]["revisions"][&k].as_u64().unwrap_or(0);
@@ -167,7 +171,9 @@ pub fn merge_progress(old:&Value,new:&mut Value){
   if new["progress"][id].is_null()&&nr>0{progress.remove(id);continue}
   if v["updatedAt"].as_u64().unwrap_or(0)>new["progress"][id]["updatedAt"].as_u64().unwrap_or(0){progress.insert(id.clone(),v.clone());}
  }}
+ for(id,at)in &deleted{if progress.get(id).is_some_and(|p|at.as_u64().unwrap_or(0)>=p["updatedAt"].as_u64().unwrap_or(0)){progress.remove(id);}}
  new["progress"]=Value::Object(progress);
+ if !deleted.is_empty(){new["_progressDeleted"]=Value::Object(deleted);}
 }
 fn profile_scope(state:&Value)->String {
  let people=&state["_people"];
@@ -190,6 +196,7 @@ mod migration_tests {
   s.write(first.clone()).unwrap();let mut erased=first.clone();erased["progress"]=json!({});erased["_progressDeleted"]=json!({"series:episode":40});s.write(erased).unwrap();
   s.checkpoint(json!({"profileScope":profile_scope(&first),"item":{"type":"series"},"vid":"episode","position":65,"duration":100,"updatedAt":30})).unwrap();
   assert_eq!(s.read().unwrap()["progress"],json!({}));
+  s.write(first).unwrap();assert_eq!(s.read().unwrap()["progress"],json!({}));
   drop(s);std::fs::remove_dir_all(root).unwrap();
  }
  #[test]fn dpapi_and_legacy_profile(){

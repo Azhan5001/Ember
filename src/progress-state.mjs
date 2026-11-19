@@ -17,9 +17,11 @@ import {profileScope} from './profile-core.mjs';
 export function mergeProgressState(stored, incoming) {
   if(profileScope(stored)!==profileScope(incoming))return incoming;
   const scoped=!!incoming?._people;
+  const deleted={...stored?._progressDeleted};
+  for(const [id,at] of Object.entries(incoming?._progressDeleted||{}))deleted[id]=Math.max(deleted[id]||0,at);
   const progress = scoped?{...incoming?.progress}:{ ...stored?.progress, ...incoming?.progress };
   for (const [id, old] of Object.entries(stored?.progress || {})) {
-    const deletedAt=incoming?._progressDeleted?.[id]||0;
+    const deletedAt=deleted[id]||0;
     if(deletedAt>0&&deletedAt>=(old.updatedAt||0)&&deletedAt>=(incoming?.progress?.[id]?.updatedAt||0)){delete progress[id];continue;}
     const ownerChanged=incoming?._sync?.owner && incoming._sync.owner!==stored?._sync?.owner;
     if(scoped && !incoming?.progress?.[id])continue;
@@ -30,7 +32,8 @@ export function mergeProgressState(stored, incoming) {
     if(!incoming?.progress?.[id] && newRevision>0){delete progress[id];continue;}
     if(old.updatedAt > (incoming?.progress?.[id]?.updatedAt || 0))progress[id]=old;
   }
-  return { ...incoming, progress };
+  for(const [id,at] of Object.entries(deleted))if(progress[id] && at>=(progress[id].updatedAt||0))delete progress[id];
+  return { ...incoming, progress, ...(Object.keys(deleted).length?{_progressDeleted:deleted}:{}) };
 }
 export function continueItems(progress, now=Date.now()) {
   const seen=new Set(), records=Object.values(progress||{}).filter(p=>p.item?.id).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));

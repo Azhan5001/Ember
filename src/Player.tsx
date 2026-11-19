@@ -44,7 +44,7 @@ import {
 } from "lucide-react";
 import Artwork from "./Artwork";
 import { artwork, request, subtitles } from "./api";
-import { playbackTorBoxKey, webTorBoxStream } from "./web-playback";
+import { playbackTorBoxKey, webTorBoxStream, browserProviderLink } from "./web-playback";
 import { rankSources, linuxPlaybackSources, sourceTransport, configuredTorBoxKey, nextEpisode, subtitleCues } from "./core.mjs";
 import { segmentDetails, releaseKey, lang, original } from "./smart-skip";
 const fmt=(value:number)=>{const n=finiteTime(value);return `${Math.floor(n/60)}:${String(Math.floor(n%60)).padStart(2,'0')}`};
@@ -441,6 +441,7 @@ export default function Player({
   }
   async function resolve(source: any, queue = false) {
     if (!queue && (sourceTransport(source) === "http" || (!providerOnly && source.url))) {
+      if(browser)return {...source,url:await browserProviderLink(source.url)};
       if ((linux||android) && window.ember?.mediaRemote && !source.providerRelay && !source.playlist &&
           !hlsSource(source) && !source.localTorrent) {
         const remote = await window.ember.mediaRemote(source.url, source.behaviorHints?.proxyHeaders?.request);
@@ -510,7 +511,7 @@ export default function Player({
       const deadline = setTimeout(() => controller.abort(), 20000);
       try {
         const {browserRemux} = await import("./browser-remux");
-        const repacked = await browserRemux(v, source.url, target, change.audio, controller.signal);
+        const repacked = await browserRemux(v, source.url, target, change.audio, controller.signal, preferredAudio());
         if (id !== generation.current || !mounted.current) { controller.abort(); throw Error("Cancelled"); }
         remuxTracks.current[index] = repacked.tracks;
         compatibility.current[index] = {start:repacked.start,duration:repacked.duration,audio:repacked.audio,stream:repacked.stream};

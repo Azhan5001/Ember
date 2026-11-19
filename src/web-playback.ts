@@ -45,3 +45,13 @@ export function browserStreamAllowed(url: string) {
     return protocol === "https:" || (protocol === "http:" && location.protocol === "http:");
   } catch { return false; }
 }
+
+export async function browserProviderLink(raw: string) {
+  let parsed: URL;try {parsed=new URL(raw);}catch{return raw;}
+  if(parsed.hostname!=='torrentio.strem.fun' || !parsed.pathname.startsWith('/resolve/torbox/'))return raw;
+  const response=await fetch('/api/provider-link',{method:'POST',cache:'no-store',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({url:raw}),signal:AbortSignal.timeout(30000)});
+  const result=await response.json().catch(()=>null);
+  if(!response.ok || typeof result?.url!=='string')throw Error('Could not open the provider link. Update the website with the complete Ember web package, or try another source.');
+  return result.url;
+}

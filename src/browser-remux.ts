@@ -1,10 +1,11 @@
 import {Input, ALL_FORMATS, UrlSource, Output, Mp4OutputFormat, StreamTarget,
   EncodedPacketSink, EncodedVideoPacketSource, EncodedAudioPacketSource, AudioSampleSink, AudioSampleSource} from 'mediabunny';
 import type {MediaTrack} from './embedded-media';
+import {audioLanguage} from './audio-track-core.mjs';
 
 // Bounded packet copy into MP4 fragments, without a movie-sized buffer or disk cache.
 export async function browserRemux(video: HTMLVideoElement, url: string, target: number,
-  audioIndex: number | undefined, signal: AbortSignal) {
+  audioIndex: number | undefined, signal: AbortSignal, preferredLanguage = '') {
   const input = new Input({formats: ALL_FORMATS, source: new UrlSource(url, {
     maxCacheSize: 8 * 1024 * 1024, parallelism: 2,
     requestInit: {cache:'no-store', credentials:'omit', referrerPolicy:'no-referrer'},
@@ -31,7 +32,11 @@ export async function browserRemux(video: HTMLVideoElement, url: string, target:
     if (!track) throw Error('This source has no readable video track.');
     const audioTracks = await input.getAudioTracks();
     let selectedIndex=audioIndex ?? 0;
-    if(audioIndex===undefined && audioTracks.length && !(await audioTracks[0].getCodec())){
+    if(audioIndex===undefined && audioLanguage(preferredLanguage)) {
+      const preferred=audioTracks.findIndex(entry=>audioLanguage(entry.languageCode)===audioLanguage(preferredLanguage));
+      if(preferred>=0)selectedIndex=preferred;
+    }
+    if(audioIndex===undefined && audioTracks.length && !(await audioTracks[selectedIndex].getCodec())){
       for(let index=1;index<audioTracks.length;index++){
         if(await audioTracks[index].getCodec()){selectedIndex=index;break;}
       }

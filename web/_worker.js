@@ -66,10 +66,35 @@ function json(value, status) {
   return Response.json(value, {status,headers:{"Cache-Control":"no-store","Referrer-Policy":"no-referrer"}});
 }
 
+const torboxHost = host => ['torbox.app','tb-cdn.pw'].some(domain=>host===domain||host.endsWith('.'+domain));
+export async function providerLink(raw) {
+  let url;
+  try { url=new URL(raw); } catch { throw Error('Invalid provider link.'); }
+  if(url.protocol!=='https:' || url.username || url.password || url.port ||
+     url.hostname!=='torrentio.strem.fun' || !url.pathname.startsWith('/resolve/torbox/'))
+    throw Error('Unsupported provider link.');
+  for(let redirects=0;redirects<5;redirects++) {
+    const response=await fetch(url.href,{redirect:'manual',cache:'no-store',
+      signal:AbortSignal.timeout(10000),headers:{Range:'bytes=0-0','User-Agent':'Ember/0.7.6'}});
+    void response.body?.cancel();
+    if([301,302,303,307,308].includes(response.status)) {
+      const location=response.headers.get('Location');if(!location)break;
+      const next=new URL(location,url);
+      if(next.protocol!=='https:' || next.username || next.password || next.port ||
+         !(torboxHost(next.hostname)||(next.hostname==='torrentio.strem.fun' && next.pathname.startsWith('/resolve/torbox/'))))
+        throw Error('The provider returned an unsupported video server.');
+      // Resolve links only; media bytes go directly from the provider to the browser.
+      if(torboxHost(next.hostname))return {url:next.href};
+      url=next;
+    } else break;
+  }
+  throw Error('The provider could not create a video link. Try another source.');
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname !== "/api/torbox") {
+    if (!["/api/torbox","/api/provider-link"].includes(url.pathname)) {
       const asset = await env.ASSETS.fetch(request);
       const headers = new Headers(asset.headers);
       headers.set("X-Ember-Build", "0.7.6");
@@ -83,7 +108,7 @@ export default {
     if (request.method !== "POST") return json({error:"Use POST."},405);
     if (request.headers.get("Origin") !== url.origin) return json({error:"Use the Ember site to open this source."},403);
     const token = request.headers.get("Authorization")?.match(/^Bearer ([\x21-\x7e]{1,512})$/)?.[1];
-    if (!token) return json({error:"Enter your TorBox API key in Addons."},401);
+    if (!token && url.pathname === "/api/torbox") return json({error:"Enter your TorBox API key in Addons."},401);
     const reader = request.body?.getReader();
     let payload = "";
     try {
@@ -98,6 +123,11 @@ export default {
         payload += decoder.decode(value,{stream:true});
       }
       const source = JSON.parse(payload + decoder.decode());
+      if(url.pathname === '/api/provider-link') {
+        if(typeof source?.url!=='string' || source.url.length>3500)return json({error:'Invalid provider link.'},400);
+        try {return json(await providerLink(source.url),200);}
+        catch {return json({error:'Could not resolve this provider link. Try another source.'},422);}
+      }
       if (typeof source?.hash !== "string" || !/^[a-f\d]{40}$/i.test(source.hash) ||
           (source.filename != null && typeof source.filename !== "string") ||
           (source.index != null && !validId(source.index)) || typeof source.movie !== "boolean" || (source.queue != null && typeof source.queue !== "boolean")) {
