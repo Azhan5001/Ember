@@ -1,4 +1,4 @@
-// Linux serves provider video through a bounded, diskless relay. The provider URL
+// Native apps serve provider video through a bounded, diskless relay. The provider URL
 // and authentication headers stay in Rust, and the webview receives no-store responses.
 use anyhow::{anyhow, bail, Result};
 use axum::{
@@ -144,6 +144,7 @@ async fn stream(
     };
     let mut response = Response::builder()
         .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+        .header(header::ACCESS_CONTROL_EXPOSE_HEADERS, "Content-Range, Accept-Ranges, Content-Length")
         .header(header::CACHE_CONTROL, "no-store")
         .header(header::CONTENT_TYPE, &source.content_type);
     if method == Method::HEAD {
@@ -215,6 +216,7 @@ mod tests {
         let bytes = client.get(&media).header(header::RANGE, "bytes=2-4").send().await.unwrap();
         assert_eq!(bytes.status(), StatusCode::PARTIAL_CONTENT);
         assert_eq!(bytes.headers()[header::CACHE_CONTROL], "no-store");
+        assert!(bytes.headers()[header::ACCESS_CONTROL_EXPOSE_HEADERS].to_str().unwrap().contains("Content-Range"));
         assert_eq!(bytes.headers()[header::CONTENT_RANGE], "bytes 2-4/6");
         assert_eq!(bytes.text().await.unwrap(), "cde");
         let denied = client.get(media.replace("/secret/", "/invalid/")).send().await.unwrap();
