@@ -1,6 +1,6 @@
 # Ember 0.7.7
 
-Windows and Android try the same streaming remux/audio-conversion path as the website before using full native video conversion. Provider redirects are resolved once by the app relay. Track probing no longer blocks this path; native fallback has a bounded initial probe wait. Embedded subtitles are discovered after playback starts.
+Windows and Android try the same streaming remux/audio-conversion path as the website before using full native video conversion. Provider redirects are resolved once by the app relay. The fast path also handles links without filename/audio hints. The relay exposes byte-range/file-size headers so remote metadata reads and seeks do not trigger a slow conversion fallback. Track probing no longer blocks this path; native fallback has a bounded initial probe wait. Embedded subtitles are discovered after playback starts.
 
 Party synchronization waits until muted media startup completes. Interrupted play attempts are not reported as codec failures. Signed-in devices can list and join active parties belonging to the same account, including parties created from another subprofile. Run the supplied Supabase update to enable that list.
 

@@ -30,7 +30,7 @@ async fn torrent(State(s):State<Server>,Path((token,hash,index)):Path<(String,St
  let file=s.torrents.files.lock().await.get(&format!("{hash}/{index}")).cloned();let Some((h,i,len,name))=file else{return StatusCode::NOT_FOUND.into_response()};
  let Some((start,end,partial))=range(headers.get("range").and_then(|h|h.to_str().ok()),len)else{return Response::builder().status(416).header("content-range",format!("bytes */{len}")).body(Body::empty()).unwrap()};
  let ty=if name.ends_with(".mp4"){"video/mp4"}else if name.ends_with(".webm"){"video/webm"}else{"video/x-matroska"};
- let mut response=Response::builder().status(if partial{206}else{200}).header("content-type",ty).header("cache-control","no-store").header("accept-ranges","bytes").header("content-length",(end-start+1).to_string()).header("access-control-allow-origin","*");
+ let mut response=Response::builder().status(if partial{206}else{200}).header("content-type",ty).header("cache-control","no-store").header("accept-ranges","bytes").header("content-length",(end-start+1).to_string()).header("access-control-allow-origin","*").header("access-control-expose-headers","Content-Range, Accept-Ranges, Content-Length");
  if partial{response=response.header("content-range",format!("bytes {start}-{end}/{len}"));}
  if method==Method::HEAD{return response.body(Body::empty()).unwrap()}
  let Ok(mut stream)=h.stream(i)else{return StatusCode::SERVICE_UNAVAILABLE.into_response()};

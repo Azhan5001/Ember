@@ -624,7 +624,7 @@ export default function Player({
       if (id !== generation.current) return;
       const canPlayAudio=(mime:string)=>videos.current[targetSlot]?.canPlayType(mime);
       const riskyAudio=needsAudioConversion(hintedAudio(input)||hintedAudio(source),canPlayAudio);
-      const fastRemux=(browser||(!linux&&!!window.MediaSource)) && (source.browserRemux || (browser&&forceCompatibility) || (!forceCompatibility&&(riskyAudio||needsContainerRemux(input)||needsContainerRemux(source)||prefersNative(input))));
+      const fastRemux=(browser||(!linux&&!!window.MediaSource)) && (source.browserRemux || (!browser&&!forceCompatibility) || (browser&&forceCompatibility) || (!forceCompatibility&&(riskyAudio||needsContainerRemux(input)||needsContainerRemux(source)||prefersNative(input))));
       if (fastRemux && !hlsSource(source)) source = {...source,browserRemux:true};
       const isHls = hlsSource(source);
       const browserType = source.contentType;
