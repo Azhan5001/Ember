@@ -48,13 +48,13 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run package:win -- --ci
-      - run: 'cargo test --release --manifest-path src-tauri/Cargo.toml --lib storage::'
-      - run: 'cargo test --release --manifest-path src-tauri/Cargo.toml --lib remote::'
       - uses: actions/upload-artifact@v4
         with:
           name: ember-windows
           path: src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
+      - run: 'cargo test --release --manifest-path src-tauri/Cargo.toml --lib storage::'
+      - run: 'cargo test --release --manifest-path src-tauri/Cargo.toml --lib remote::'
   linux:
     if: ${{ inputs.platform == 'all' || inputs.platform == 'linux' }}
     runs-on: ubuntu-22.04
