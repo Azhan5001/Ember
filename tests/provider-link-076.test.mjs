@@ -10,3 +10,11 @@ test('provider redirect resolution permits only Torrentio and TorBox and never b
   const foreign=await worker.fetch(new Request('https://ember.example/api/provider-link',{method:'POST',headers:{Origin:'https://foreign.example'},body:JSON.stringify({url})}),{});assert.equal(foreign.status,403);
  }finally{globalThis.fetch=original}
 });
+test('intermediate TorBox API redirects are resolved before returning a browser media link',async()=>{
+ const original=globalThis.fetch,hosts=[];
+ try{
+  globalThis.fetch=async url=>{hosts.push(new URL(url).hostname);return new Response(null,{status:302,headers:{Location:hosts.length===1?'https://api.torbox.app/download/fixture':'https://nexus.example.tb-cdn.pw/media.mp4'}})};
+  const result=await providerLink('https://torrentio.strem.fun/resolve/torbox/fixture');
+  assert.equal(result.url,'https://nexus.example.tb-cdn.pw/media.mp4');assert.deepEqual(hosts,['torrentio.strem.fun','api.torbox.app']);
+ }finally{globalThis.fetch=original}
+});

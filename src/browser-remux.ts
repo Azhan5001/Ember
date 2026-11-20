@@ -1,3 +1,4 @@
+import {mediaRangeFetch} from './media-range-fetch.mjs';
 import {Input, ALL_FORMATS, UrlSource, Output, Mp4OutputFormat, StreamTarget,
   EncodedPacketSink, EncodedVideoPacketSource, EncodedAudioPacketSource, AudioSampleSink, AudioSampleSource} from 'mediabunny';
 import type {MediaTrack} from './embedded-media';
@@ -10,14 +11,7 @@ export async function browserRemux(video: HTMLVideoElement, url: string, target:
     maxCacheSize: 8 * 1024 * 1024, parallelism: 2,
     requestInit: {cache:'no-store', credentials:'omit', referrerPolicy:'no-referrer'},
     getRetryDelay: () => null,
-    fetchFn: async (resource, init) => {
-      const response = await fetch(resource, {...init, signal});
-      if (new Headers(init?.headers).has('Range') && response.status !== 206) {
-        void response.body?.cancel();
-        throw Error('This provider does not allow byte-range streaming for browser compatibility playback.');
-      }
-      return response;
-    },
+    fetchFn: mediaRangeFetch(signal),
   })});
   let output: Output | undefined, object = '', failure: unknown;
   const close = () => {

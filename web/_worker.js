@@ -84,9 +84,13 @@ export async function providerLink(raw) {
          !(torboxHost(next.hostname)||(next.hostname==='torrentio.strem.fun' && next.pathname.startsWith('/resolve/torbox/'))))
         throw Error('The provider returned an unsupported video server.');
       // Resolve links only; media bytes go directly from the provider to the browser.
-      if(torboxHost(next.hostname))return {url:next.href};
+      if(next.hostname==='tb-cdn.pw'||next.hostname.endsWith('.tb-cdn.pw'))return {url:next.href};
+      // TorBox API redirects lack browser CORS headers. Resolve them here too,
+      // instead of handing an intermediate API URL back to browser fetch.
       url=next;
-    } else break;
+    } else if([200,206].includes(response.status)&&torboxHost(url.hostname)&&
+      /^(video\/|application\/octet-stream)/i.test(response.headers.get('Content-Type')||''))return {url:url.href};
+    else break;
   }
   throw Error('The provider could not create a video link. Try another source.');
 }
