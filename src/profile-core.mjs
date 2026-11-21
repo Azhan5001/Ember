@@ -45,9 +45,9 @@ const content = (state, part) => ({...state,...snapshot(part || {})});
 export function ensurePeople(state, empty) {
   if (state._people?.version === 2) {
     let people=state._people;
-    if(people.bundledMetadataVersion!==4){
+    if(people.bundledMetadataVersion!==5){
       const refresh=part=>part?{...part,addons:refreshBundledMetadata(part.addons,empty.addons)}:part;
-      people={...people,bundledMetadataVersion:4,guest:refresh(people.guest),accounts:Object.fromEntries(Object.entries(people.accounts||{}).map(([id,a])=>[id,{...a,sharedAddons:refreshBundledMetadata(a.sharedAddons,empty.addons),spaces:Object.fromEntries(Object.entries(a.spaces||{}).map(([key,part])=>[key,refresh(part)]))}]))};
+      people={...people,bundledMetadataVersion:5,guest:refresh(people.guest),accounts:Object.fromEntries(Object.entries(people.accounts||{}).map(([id,a])=>[id,{...a,sharedAddons:refreshBundledMetadata(a.sharedAddons,empty.addons),spaces:Object.fromEntries(Object.entries(a.spaces||{}).map(([key,part])=>[key,refresh(part)]))}]))};
       state={...refresh(state),_people:people};
     }
     if(people.guestProviderDefaultsVersion !== 2) {
@@ -57,15 +57,15 @@ export function ensurePeople(state, empty) {
       state={...state,...(!people.owner || people.activeId==='guest' ? {addons:clean.addons} : {}),_people:people};
     }
     const defaults=snapshot(empty).addons;
-    if(people.guestDefaultsVersion!==3 || Object.values(people.accounts || {}).some(a=>a.addonDefaultsVersion!==3)){
+    if(people.guestDefaultsVersion!==4 || Object.values(people.accounts || {}).some(a=>a.addonDefaultsVersion!==4)){
       const guest=people.guest || (!people.owner?snapshot(state):snapshot(empty));
       const accounts=Object.fromEntries(Object.entries(people.accounts || {}).map(([id,account])=>{
-        if(account.addonDefaultsVersion===3)return [id,account];
+        if(account.addonDefaultsVersion===4)return [id,account];
         const sharedAddons=addDefaults(account.sharedAddons,defaults);
         const spaces=Object.fromEntries(Object.entries(account.spaces || {}).map(([key,part])=>[key,{...part,addons:addDefaults(part.addons,defaults)}]));
-        return [id,{...account,sharedAddons,spaces,addonDefaultsVersion:3}];
+        return [id,{...account,sharedAddons,spaces,addonDefaultsVersion:4}];
       }));
-      people={...people,guest:{...guest,addons:addDefaults(guest.addons,defaults)},guestDefaultsVersion:3,accounts};
+      people={...people,guest:{...guest,addons:addDefaults(guest.addons,defaults)},guestDefaultsVersion:4,accounts};
       const active=people.owner && people.activeId!=='guest' ? accounts[people.owner] : null;
       const entry=active?.profiles?.find(p=>p.id===people.activeId);
       state={...state,addons:active?(entry?.isolatedAddons?spacesFor(active,people.activeId).addons:active.sharedAddons):people.guest.addons,_people:people};
@@ -116,7 +116,7 @@ export function ensureAccount(state,owner,empty) {
   if (people.accounts[owner]) return state;
   const part=snapshot(empty);
   part.profile='You';
-  const account={profiles:[{id:'main',name:'You',avatar:0,isolatedAddons:false,kids:false}],spaces:{main:part},sharedAddons:clone(part.addons),addonDefaultsVersion:3,syncEnabled:true};
+  const account={profiles:[{id:'main',name:'You',avatar:0,isolatedAddons:false,kids:false}],spaces:{main:part},sharedAddons:clone(part.addons),addonDefaultsVersion:4,syncEnabled:true};
   return {...state,_people:{...people,accounts:{...people.accounts,[owner]:account}}};
 }
 export function enterProfile(state,owner,id,empty) {

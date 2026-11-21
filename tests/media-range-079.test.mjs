@@ -16,3 +16,12 @@ test('visible range metadata adds no request; invalid HEAD size is never invente
  const unknown=mediaRangeFetch(signal,async(u,i)=>i.method==='HEAD'?new Response(null,{status:405}):new Response('test',{status:206,headers:{'Content-Length':'4'}}));
  assert.equal((await unknown('https://media.invalid',{headers:{Range:'bytes=0-3'}})).headers.get('Content-Range'),null);
 });
+test('a stalled range body fails promptly so playback can retry',async()=>{
+ let cancelled=false;
+ const read=mediaRangeFetch(new AbortController().signal,async()=>new Response(new ReadableStream({pull:()=>new Promise(()=>{}),cancel(){cancelled=true}})),25);
+ const response=await read('https://media.invalid');await assert.rejects(response.arrayBuffer(),{name:'TimeoutError'});assert.ok(cancelled);
+});
+test('pausing the consumer does not time out a healthy range body',async()=>{
+ const read=mediaRangeFetch(new AbortController().signal,async()=>new Response('healthy'),20);
+ const response=await read('https://media.invalid');await new Promise(r=>setTimeout(r,40));assert.equal(await response.text(),'healthy');
+});

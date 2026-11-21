@@ -10,7 +10,7 @@ export async function browserRemux(video: HTMLVideoElement, url: string, target:
   const input = new Input({formats: ALL_FORMATS, source: new UrlSource(url, {
     maxCacheSize: 8 * 1024 * 1024, parallelism: 2,
     requestInit: {cache:'no-store', credentials:'omit', referrerPolicy:'no-referrer'},
-    getRetryDelay: () => null,
+    getRetryDelay: attempts => attempts<=3 ? Math.min(1.5,attempts*.35) : null,
     fetchFn: mediaRangeFetch(signal),
   })});
   let output: Output | undefined, object = '', failure: unknown;
@@ -104,10 +104,22 @@ export async function browserRemux(video: HTMLVideoElement, url: string, target:
       if (chunk.position !== written) throw Error('The streaming muxer attempted an out-of-order write.');
       buffer ??= media.addSourceBuffer(mime);
       if (duration !== null && duration > start) media.duration = duration - start;
-      if (video.currentTime > 70 && buffer.buffered.length && buffer.buffered.start(0) < video.currentTime - 60) {
-        await update(() => buffer!.remove(0,video.currentTime - 60));
+      if (video.currentTime > 20 && buffer.buffered.length && buffer.buffered.start(0) < video.currentTime - 15) {
+        await update(() => buffer!.remove(0,video.currentTime - 15));
       }
-      await update(() => buffer!.appendBuffer(chunk.data));
+      // MSE quotas vary sharply across phones. Reclaim played frames before
+      // retrying the same fragment; never abandon the packet pump silently.
+      const deadline=performance.now()+15000;
+      for(;;){
+        signal.throwIfAborted();
+        try{await update(() => buffer!.appendBuffer(chunk.data));break;}
+        catch(error){
+          if(!(error instanceof DOMException)||error.name!=='QuotaExceededError'||performance.now()>deadline)throw error;
+          const end=Math.max(0,video.currentTime-2);
+          if(end>0&&buffer.buffered.length&&buffer.buffered.start(0)<end)await update(()=>buffer!.remove(0,end));
+          else await new Promise(resolve=>setTimeout(resolve,200));
+        }
+      }
       written += chunk.data.byteLength;
     }});
     output = new Output({format:new Mp4OutputFormat({fastStart:'fragmented',minimumFragmentDuration:1}),
@@ -125,7 +137,7 @@ export async function browserRemux(video: HTMLVideoElement, url: string, target:
       while (v || a || sample) {
         signal.throwIfAborted();
         const ahead = Math.min(v?.timestamp ?? Infinity,a?.timestamp ?? Infinity,sample?.timestamp ?? Infinity) - start;
-        if (ahead > Math.max(target - start,video.currentTime) + 40) {
+        if (ahead > Math.max(target - start,video.currentTime) + 20) {
           await new Promise(resolve=>setTimeout(resolve,100));
           continue;
         }

@@ -736,6 +736,7 @@ export function migrate(s: any) {
   s = {
     ...s,
     settings: {
+      hideAdult: true,
       skipTrust: "community",
       autoSkipIntro: false,
       autoSkipRecap: false,
@@ -764,7 +765,7 @@ export function migrate(s: any) {
     "autoplay",
   ])
     delete s.settings[k];
-  if (s.addonDefaultsVersion !== 5) {
+  if (s.addonDefaultsVersion !== 6) {
     const addons = [...(s.addons || [])];
     for (const a of essentials) {
       const i = addons.findIndex((b) => a.manifest.id === b.manifest.id);
@@ -772,7 +773,7 @@ export function migrate(s: any) {
       else if (a.manifest.id === "com.linvo.cinemeta" && addons[i].base === a.base && !addons[i].manifest.version) addons[i] = { ...a, enabled:addons[i].enabled };
       else if (a.manifest.id === "com.stremio.torrentio.addon" && addons[i].base === a.base) addons[i] = {...addons[i],manifest:{...addons[i].manifest,types:a.manifest.types,idPrefixes:a.manifest.idPrefixes}};
     }
-    s = { ...s, addons, addonDefaultsVersion: 5 };
+    s = { ...s, addons, addonDefaultsVersion: 6 };
   }
   return {...s,addons:refreshBundledMetadata(s.addons,essentials)};
 }

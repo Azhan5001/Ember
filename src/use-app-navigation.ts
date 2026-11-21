@@ -7,7 +7,7 @@ type View = {
   modal: string;
 };
 const signature = (view: View) =>
-  JSON.stringify([view.page, view.detail?.id, view.session?.vid, view.modal]);
+  JSON.stringify([view.page, view.detail?.id, view.session ? "player" : null, view.modal]);
 
 export function useAppNavigation(view: View, restore: (view: View) => void, scope: string) {
   const current = useRef(view);
@@ -37,7 +37,8 @@ export function useAppNavigation(view: View, restore: (view: View) => void, scop
     const pop = (event: PopStateEvent) => {
       const saved = event.state;
       if (saved?.ember !== group.current) return;
-      const previous = entries.current.get(saved.key);
+      let previous = entries.current.get(saved.key);
+      if(current.current.session||previous?.session){previous={page:"Home",detail:null,session:null,modal:""};for(const [id,entry] of entries.current)if(entry.session)entries.current.set(id,previous);entries.current.set(saved.key,previous);history.replaceState(saved,"");}
       if (!previous) return;
       depth.current = saved.depth;
       last.current = signature(previous);
@@ -54,6 +55,7 @@ export function useAppNavigation(view: View, restore: (view: View) => void, scop
       const key = crypto.randomUUID();
       depth.current += 1;
       entries.current.set(key, view);
+      while(entries.current.size>50)entries.current.delete(entries.current.keys().next().value!);
       history.pushState({ember: group.current, key, depth: depth.current}, "");
       last.current = next;
     } else {

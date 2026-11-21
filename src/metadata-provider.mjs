@@ -1,4 +1,4 @@
-export const AIO_BASE='https://aiometadata.elfhosted.com/stremio/23e5c3c4-cc2f-40a8-8608-8fd2f51fc5cb';
+export const AIO_BASE='https://aiometadata.elfhosted.com/stremio/72a1aa3f-64bb-49de-b55c-d0c9007413b8';
 export const isAio=a=>a?.manifest?.id==='aio-metadata';
 export const isCinemeta=a=>a?.manifest?.id==='com.linvo.cinemeta';
 export const isAnimeFallback=a=>a?.manifest?.id==='animes-season-addon';
@@ -8,6 +8,7 @@ export const hasAio=addons=>addons.some(a=>a.enabled&&isAio(a));
 export const isGenreCatalog=c=>!/(?:trending|airing_today|\.year|\.language|\.schedule|\.seasons|\.studios|\.collections)/.test(c.id);
 export function catalogPriority(job){
  if(isCinemeta(job.addon))return 0;
+ if(isAnimeFallback(job.addon))return 10;
  if(!isAio(job.addon))return 100;
  if(job.catalog.id==='mal.airing')return 10;
  if(job.catalog.id==='mal.season_top_new')return 11;
@@ -22,7 +23,9 @@ export function catalogViews(c){
 export function catalogItems(items,job){return job.catalog?.itemType?items.filter(i=>i.type===job.catalog.itemType):items;}
 export function refreshBundledMetadata(addons,defaults){
  const current=defaults.find(a=>isAio(a));
- return (addons||[]).map(a=>current&&isAio(a)&&a.base===current.base?{...a,manifest:current.manifest}:a);
+ const oldBase='https://aiometadata.elfhosted.com/stremio/23e5c3c4-cc2f-40a8-8608-8fd2f51fc5cb';
+ const list=(addons||[]).map(a=>current&&isAio(a)&&[oldBase,current.base].includes(a.base)?{...a,base:current.base,manifest:current.manifest}:a);
+ const seen=new Set();return list.filter(a=>{if(seen.has(a.base))return false;seen.add(a.base);return true});
 }
 export function defaultCatalogChoice(c,options,now=new Date()){
  if(c.id==='mal.schedule')return ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getUTCDay()];

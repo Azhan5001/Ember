@@ -1,0 +1,5 @@
+<!doctype html><html><body><div id="root"></div><script type="module">
+import React from 'react';import{createRoot}from'react-dom/client';import TitleDetails from '/src/TitleDetails';import{catalogs,metadata}from'/src/api';import{essentials}from'/src/defaults';import{segmentDetails}from'/src/smart-skip';import{browserRemux}from'/src/browser-remux';
+const root=createRoot(document.querySelector('#root'));
+window.test={catalogs,metadata,essentials,segmentDetails,browserRemux,render(item){root.render(React.createElement(TitleDetails,{item,addons:[],season:1,progress:{},onPlay:(_,v)=>window.played=v.id,onClose(){},setSeason(){},onLibrary(){},openWebsite(){}}))}};
+</script></body></html>

@@ -1,9 +1,10 @@
+import {isAdultItem} from './content-filter.mjs';
 import {titleRating} from './ratings-service';
 import {ratingId,applyRating} from './ratings-core.mjs';
 import {isAio,isFallback,hasAio,matchesFacets,catalogItems} from './metadata-provider.mjs';
 import {cachedMetadata} from './metadata-cache.mjs';
 import { enrichTV, discoverySupplement, episodeArtwork } from './metadata-enrichment';
-import { enrichMetadata, matchEpisode } from './metadata-core.mjs';
+import { enrichMetadata, matchEpisode, mergeEpisode } from './metadata-core.mjs';
 import type { MediaInfo } from "./embedded-media";
 import { catalogJobs, normalizeItem, mergeItems, identityKey, matchesGenres, sortItems, resourceTypeFor, sameTitle, searchItems } from "./catalog-core.mjs";
 import { artworkCandidates } from "./artwork-core.mjs";
@@ -108,11 +109,11 @@ const known = new Map<string, {item:Item; at:number}>();
 const metaCache = new CatalogCache({ limit: 128 });
 async function providerMeta(a: Addon, type: string, id: string, priority=false) {
   const url = resourceUrl(a.base, "meta", type, id);
-  return metaCache.get(url, () => limited(() => cachedMetadata(url,()=>json(url)).then(r => r.meta || null),priority));
+  return metaCache.get(url, () => priority?cachedMetadata(url,()=>json(url)).then(r=>r.meta||null):limited(() => cachedMetadata(url,()=>json(url)).then(r => r.meta || null)));
 }
 export async function catalogs(
   addons: Addon[], type = "all", search = "",
-  options: { onUpdate?: (result: any) => void; force?: boolean; lazy?: boolean; genres?: string[]; sort?: string; facets?:any; active?: () => boolean } = {},
+  options: { onUpdate?: (result: any) => void; force?: boolean; lazy?: boolean; hideAdult?:boolean; genres?: string[]; sort?: string; facets?:any; active?: () => boolean } = {},
 ) {
   const jobs = catalogJobs(addons, type, search, options),catalogGeneration={};
   let supplemental: Item[] = [];
@@ -126,12 +127,9 @@ export async function catalogs(
   const allItems = () => mergeItems([...supplemental,...rows.flatMap(r => search ? searchItems(r.items,search) : r.items).map((i: Item) => {
     const hit = known.get(i.type+":"+i.id);
     return hit && Date.now()-hit.at < 300000 ? mergeItems([i,hit.item])[0] : i;
-  })]).filter((i: Item) => type === "all" || i.type === type).map((i:Item)=>applyRating(i,ratings.get(identityKey(i))));
+  })]).filter((i: Item) => (type === "all" || i.type === type) && (options.hideAdult===false||!isAdultItem(i))).map((i:Item)=>applyRating(i,ratings.get(identityKey(i))));
   const needsMeta = (i: Item) => selected.length && !matchesGenres(i,selected);
-  const uniqueRows=(all:Item[])=>{
-    const seen:Item[]=[];
-    return rows.map(r=>({...r,items:(search?searchItems(r.items,search):r.items).flatMap((i:Item)=>{const canonical=all.find((candidate:Item)=>sameTitle(candidate,i));if(!canonical||(!r.view&&seen.some(old=>sameTitle(old,canonical))))return [];seen.push(canonical);return [canonical];})}));
-  };
+  const uniqueRows=(_all:Item[])=>rows.map(r=>({...r,items:mergeItems(search?searchItems(r.items,search):r.items).filter((i:Item)=>options.hideAdult===false||!isAdultItem(i))}));
   const snapshot = () => {
     const all=allItems(), matches=all.filter((i:Item)=>matchesGenres(i,selected)&&matchesFacets(i,options.facets));
     const ranked=sortItems(search?searchItems(matches,search):matches,options.sort);
@@ -163,6 +161,7 @@ export async function catalogs(
       const m = await metadata(addons,i,false);
       supplemental=supplemental.map(old=>old.type===i.type&&old.id===i.id?{...old,...m}:old);
       for (const row of rows) row.items = row.items.map((old: Item) => old.type === i.type && old.id === i.id ? { ...old, ...m } : old);
+      publish();
     }));
     publish();
   }
@@ -172,9 +171,11 @@ export async function catalogs(
     const extra = {...r.extra,...(more ? {skip:r.offset} : {})};
     const url = resourceUrl(r.addon.base,"catalog",r.type,r.catalog.id,extra);
     try {
-      const raw = await cache.get(url, () => limited(async () => {
+      // A search-only cache miss must not replace a Home feed with an empty
+      // response. Providers without search support are read locally only.
+      const raw = r.cachedOnly ? (cache.peek(url) ?? (await cachedMetadata(url,()=>json(url),{cacheOnly:true})).metas ?? []) : await cache.get(url, () => limited(async () => {
         if (options.active?.() === false) return [];
-        const data = await cachedMetadata(url,()=>json(url),{force:!!options.force,onRefresh:(data:any)=>{if(!more&&Array.isArray(data?.metas)&&options.active?.()!==false){r.items=catalogItems(data.metas.map((i:any,rank:number)=>normalizeItem(i,{...r,rank})),r);publish();void refreshRatings();}}});
+        const data = await cachedMetadata(url,()=>json(url),{force:!!options.force,cacheOnly:!!r.cachedOnly,onRefresh:(data:any)=>{if(!more&&Array.isArray(data?.metas)&&options.active?.()!==false){r.items=catalogItems(data.metas.map((i:any,rank:number)=>normalizeItem(i,{...r,rank})),r);publish();void refreshRatings();}}});
         if (!Array.isArray(data.metas)) throw Error("Invalid catalog");
         return data.metas.filter((i: any) => i.id && i.name);
       }), !!options.force);
@@ -202,7 +203,7 @@ export async function catalogs(
   publish();
   await Promise.all([
     Promise.all((options.lazy ? rows.slice(0,2) : rows).map(r => r.load())),
-    (!options.lazy && (search || selected.includes('K-drama'))) ? discoverySupplement(search,selected).then(list=>{supplemental=list.map(i=>normalizeItem(i));publish()}) : Promise.resolve()
+    (!options.lazy && selected.includes('K-drama')) ? discoverySupplement(search,selected).then(list=>{supplemental=list.map(i=>normalizeItem(i));publish()}) : Promise.resolve()
   ]);
   // A selective filter needs more than the first catalog page. Keep expansion bounded.
   for(let page=0;selected.length && page<2 && snapshot().items.length<32 && options.active?.()!==false;page++) {
@@ -213,15 +214,25 @@ export async function catalogs(
   if (selected.length && snapshot().items.length < 32 && options.active?.() !== false) await checkMore();
   return snapshot();
 }
-export async function metadata(addons: Addon[], item: Item, episodes=true) {
-  const ordered = [...addons].filter(a=>a.enabled).sort((a,b) => Number(isAio(b))-Number(isAio(a)) || Number(b.base === item.provider)-Number(a.base === item.provider));
-  const jobs=ordered.map(a=>({a,t:resourceTypeFor(a.manifest,"meta",item.type,item.id,item.resourceType,supports)})).filter(j=>j.t);
-  let combined:any=item;
-  const primary=jobs.find(j=>isAio(j.a));let supplied=false;
-  if(primary){try{const m=await providerMeta(primary.a,primary.t!,item.id,episodes);if(m?.id===item.id){combined=enrichMetadata(normalizeItem({...m,resourceType:primary.t,provider:primary.a.base},{catalog:{type:primary.t}}),item);supplied=true;}}catch{}}
-  if(!supplied){const results=await Promise.allSettled(jobs.filter(j=>!isAio(j.a)).slice(0,4).map(async({a,t})=>{const m=await providerMeta(a,t!,item.id,episodes);return m?.id===item.id?normalizeItem({...m,resourceType:t,provider:a.base},{catalog:{type:t}}):null;}));for(const r of results)if(r.status==='fulfilled'&&r.value)combined=enrichMetadata(combined,r.value);}
-  combined=normalizeItem(supplied?combined:await enrichTV(combined,episodes));
-  known.set(item.type+":"+item.id,{item:combined,at:Date.now()});
+export async function metadata(addons: Addon[], item: Item, episodes=true,onUpdate?:(item:Item)=>void) {
+  const jobs=addons.filter(a=>a.enabled).map(a=>({a,t:resourceTypeFor(a.manifest,"meta",item.type,item.id,item.resourceType,supports)})).filter(j=>j.t);
+  const cinema=jobs.find(j=>j.a.manifest.id==='com.linvo.cinemeta'),primary=jobs.find(j=>isAio(j.a));
+  const get=async(j:any)=>{try{const m=await providerMeta(j.a,j.t,item.id,episodes);return m?.id===item.id?normalizeItem({...m,resourceType:j.t,provider:j.a.base},{catalog:{type:j.t}}):null;}catch{return null}};
+  const baseline=cinema?get(cinema).then(m=>{if(m)onUpdate?.(enrichMetadata(m,item));return m}):Promise.resolve(null);
+  const rich=primary?get(primary):Promise.resolve(null);
+  const [base,aio]=await Promise.all([baseline,rich]);
+  let combined:any=enrichMetadata(aio||base||item,item);
+  if(base){
+    combined=enrichMetadata(combined,base);
+    if(base.videos?.length){
+      combined.videos=base.videos.map((v:any)=>{const extra=matchEpisode(v,aio?.videos||[]);return mergeEpisode({...v,thumbnail:extra?.thumbnail||v.thumbnail},extra)});
+      // Preserve announced episodes and their provider placeholder artwork,
+      // while playable episodes retain Cinemeta's scraper-compatible IDs.
+      for(const v of aio?.videos||[])if(Date.parse(v.released||v.firstAired)>Date.now()&&!combined.videos.some((b:any)=>Number(b.season)===Number(v.season)&&Number(b.episode)===Number(v.episode)))combined.videos.push(v);
+    }
+  }
+  if(!base&&!aio){for(const j of jobs.filter(j=>j!==primary&&j!==cinema).slice(0,2)){const m=await get(j);if(m){combined=enrichMetadata(m,item);break}}}
+  combined=normalizeItem(combined);known.set(item.type+":"+item.id,{item:combined,at:Date.now()});
   return combined as Item;
 }
 const artworkCache = new CatalogCache({limit:128});
@@ -259,7 +270,7 @@ export async function lookupStreams(addons: Addon[], type: string, id: string): 
         return (r.streams || []).map((s: any) => normalize(s, a.manifest.name));
       }),
   );
-  return {sources:result.flatMap(r=>r.status==="fulfilled"?r.value:[]),complete:result.every(r=>r.status==="fulfilled")};
+  return {sources:result.flatMap(r=>r.status==="fulfilled"?r.value:[]),complete:result.length>0&&result.every(r=>r.status==="fulfilled")};
   });
 }
 export async function streams(addons: Addon[], type: string, id: string) {

@@ -960,8 +960,11 @@ export default function Player({
     return () => window.removeEventListener("keydown", fn);
   }, [drawer]);
   useEffect(()=>{
+    let previouslyReady=false,handledFailure:unknown;
     const timer=setInterval(()=>{
       const p=latest.current.party,v=videos.current[active.current];if(!v)return;
+      const streamError=compatibility.current[active.current]?.stream.error();
+      if(streamError&&streamError!==handledFailure&&!opening.current&&sourceRef.current){handledFailure=streamError;const source=all.find((a:any)=>a.key===sourceRef.current.key)||sourceRef.current;void chooseRef.current(source,browser,true,{position:absoluteTime(active.current).position});return;}
       const room=p?.snapshot?.room;let ahead=0;
       for(let i=0;i<v.buffered.length;i++)if(v.currentTime>=v.buffered.start(i)-.1&&v.currentTime<=v.buffered.end(i))ahead=Math.max(ahead,v.buffered.end(i)-v.currentTime);
       const previousSample=playbackSample.current;
@@ -975,16 +978,18 @@ export default function Player({
 
       const ready=partyReady({loaded:sourceRef.current,opening:opening.current,seeking:v.seeking,blocked:partyPlayBlocked.current,readyState:v.readyState,ahead,ended:time.current.duration>0&&time.current.duration-time.current.position<1,stalled:stalledAt.current>0&&Date.now()-stalledAt.current>1200});
       p?.report({ready,duration:finiteTime(time.current.duration),position:finiteTime(time.current.position),key:mediaKey(partyMedia(s))});
-      if(!room){if(!hold.current)v.playbackRate=1;lastPartyRoom.current=null;return;}
+      if(!room){if(!hold.current)v.playbackRate=1;lastPartyRoom.current=null;previouslyReady=false;return;}
       // Muted startup owns the media element until its first frame is ready.
       // Pausing it here cancels play(), which used to masquerade as a codec error.
       if(opening.current || !sourceRef.current)return;
       if(mediaKey(room.media)!==mediaKey(partyMedia(s))){v.pause();return;}
       const now=Date.now(),serverNow=p.serverNow(),previous=lastPartyRoom.current;
-      const playing=p.connected&&!room.paused&&!room.waiting,target=partyPosition(room,serverNow);
+      const mismatch=!!p.snapshot.members.find((m:any)=>m.client===p.client)?.mismatch;
+      const playing=p.connected&&!room.paused&&!room.waiting&&!mismatch,target=partyPosition(room,serverNow);
       const action=!previous||previous.epoch!==room.epoch||previous.paused!==room.paused||Math.abs(partyPosition(previous,serverNow)-target)>0.650001;
-      if(action||now-lastPartyCheck.current>=60000)pendingPartySync.current=true;
-      if(pendingPartySync.current&&!opening.current&&!seekTimer.current&&sourceRef.current&&Number.isFinite(target)){
+      if(action||ready&&!previouslyReady||now-lastPartyCheck.current>=60000)pendingPartySync.current=true;
+      previouslyReady=ready;
+      if(pendingPartySync.current&&ready&&!mismatch&&!opening.current&&!seekTimer.current&&sourceRef.current&&Number.isFinite(target)){
         const correction=driftCorrection(absoluteTime(active.current).position,target,playing);
         if(correction.seek!==null){lastPartySeek.current=now;seek(correction.seek,true)}
         lastPartyCheck.current=now;pendingPartySync.current=false;
@@ -1107,7 +1112,9 @@ export default function Player({
       try {
         saved = JSON.parse(localStorage.getItem(key) || "[]");
       } catch {}
-      const result = await segmentDetails(s.item, s.video, duration);
+      const verified=saved.filter((x:any)=>x.verified);
+      if(alive&&verified.length)setSkipSegments(normalizeSegments(verified,duration));
+      const result = await segmentDetails(s.item, s.video, duration,undefined,partial=>{if(alive)setSkipSegments(normalizeSegments([...verified,...partial],duration))});
       const list = normalizeSegments(
         [...saved.filter((x) => x.verified), ...result.segments],
         duration,
@@ -1121,11 +1128,11 @@ export default function Player({
                 (result.errors.length ? " " + result.errors.join(" · ") : ""),
         );
       }
-    })();
+    })().catch(()=>{if(alive)setSkipStatus("Timing providers are temporarily unavailable.")});
     return () => {
       alive = false;
     };
-  }, [Math.round(duration), selected?.key, state.settings.smartSkip]);
+  }, [Math.round(duration), selected?.key, state.settings.smartSkip, s.item.imdb_id, s.item._imdbId, s.video?.id]);
   useEffect(() => {
     if (
       !completed.current &&
@@ -1389,7 +1396,7 @@ export default function Player({
           </small>
         </div>
       </div>
-      <PlayerNotices message={error || (party?.snapshot&&(!party.connected||party.snapshot.room.waiting)
+      <PlayerNotices message={error || (party?.snapshot?.members.some((m:any)=>m.client===party.client&&m.mismatch)?'Your release has a different runtime. Choose a matching source.':party?.snapshot&&(!party.connected||party.snapshot.room.waiting)
         ? !party.connected?'Reconnecting to party…':party.snapshot.members.filter((m:any)=>!m.ready||m.mismatch).map((m:any)=>m.client===party.client?(m.mismatch?'Your release has a different runtime':'Buffering…'):`${m.name} is ${m.mismatch?'using a different release':'buffering'}`).join(' · ')
         : switching ? operation==='quality'?'Preparing the new quality…':operation==='audio'?'Changing audio…':operation==='speed'?'Changing speed…':operation==='seek'?'Buffering…':'Changing source…'
         : status || (buffering&&selected&&!paused?'Buffering…':''))}/>
